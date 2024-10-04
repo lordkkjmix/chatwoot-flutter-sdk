@@ -17,7 +17,7 @@ dependencies:
   hive_flutter: ^1.1.0
   uuid: ^3.0.7
   web_socket_channel: ^2.4.0
-  json_annotation: ^4.0.1
+  json_annotation: ^4.9.0
   dio: ^5.0.0
   equatable: ^2.0.3
   riverpod: ^2.5.1
