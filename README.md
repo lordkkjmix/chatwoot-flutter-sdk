@@ -25,7 +25,7 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  chatwoot_flutter_sdk: ^0.0.1
+  chatwoot_flutter_sdk: ^0.1.0
 ```
 
 Or install via command line:

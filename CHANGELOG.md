@@ -1,4 +1,4 @@
-## [0.0.1] - September 20, 2025
+## [0.1.0] - September 20, 2025
 
 ### 🎉 Major Release - Package Rename & Modernization
 
