@@ -1,0 +1,22 @@
+# Exclude mock files from publishing
+test/chatwoot_client_test.mocks.dart
+test/data/chatwoot_repository_test.mocks.dart
+test/data/local/local_storage_test.mocks.dart
+test/data/remote/chatwoot_client_api_interceptor_test.mocks.dart
+test/data/remote/chatwoot_client_auth_service_test.mocks.dart
+test/data/remote/chatwoot_client_service_test.mocks.dart
+
+# Exclude test database files
+applicationDocumentsPath/
+test/hive_testing_path/
+hive_testing_path/
+
+# Exclude build artifacts
+build/
+
+# Development files
+.fvm/
+.vscode/
+
+# Test coverage
+coverage/
