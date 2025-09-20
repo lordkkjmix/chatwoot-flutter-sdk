@@ -182,6 +182,9 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
             ),
             locale: 'en',
             onAttachFile: _androidFilePicker,
+            closeWidget: () {
+              Navigator.pop(context);
+            },
             onLoadStarted: () {
               setState(() {
                 _messages.add('📱 Chat widget loading started');
