@@ -15,7 +15,7 @@ Integrate Chatwoot's real-time messaging capabilities into your Flutter app with
 - 📱 **Cross Platform** - Works on iOS, Android, and other Flutter platforms
 - 💾 **Offline Support** - Local message persistence with Hive
 - 📎 **File Attachments** - Support for image and file sharing
-- 🎨 **Customizable UI** - Build your own chat interface or use pre-built widgets
+- 🎨 **Customizable UI** - Build your own chat interface or use pre-built widgets (full native components coming soon)
 - 🔔 **Event Callbacks** - Handle typing indicators, message status, and more
 - 🌍 **Internationalization** - Multi-language support
 
@@ -85,6 +85,8 @@ That's it! Your chat widget is ready. 🎉
 ### Option 2: Native Flutter Implementation
 
 For more control over the UI and advanced features, use `ChatwootClient` to build your own chat interface.
+
+> ⚠️ **Note**: Full native chat UI components are currently in development. The example below shows how to implement a basic chat interface. A complete native chat widget with advanced features will be available in future releases.
 
 #### Setup:
 1. Create an **API Channel** in your Chatwoot dashboard ([Guide](https://www.chatwoot.com/docs/product/channels/api/create-channel))
@@ -327,7 +329,7 @@ await ChatwootClient.clearAllData();  // Clear all stored data
 Check out our comprehensive [example app](example/) that demonstrates:
 
 - ✅ **WebView Chat Widget** - Full-featured chat interface
-- ✅ **Custom Flutter Chat** - Native Flutter implementation using `flutter_chat_ui`
+- 🚧 **Custom Flutter Chat** - Native Flutter implementation using `flutter_chat_ui` (basic example)
 - ✅ **File Attachments** - Image and file sharing
 - ✅ **Real-time Events** - Connection status, typing indicators
 - ✅ **Persistence** - Offline message access
