@@ -45,7 +45,6 @@ class PersistedChatwootMessagesDao extends ChatwootMessagesDao {
   Future<void> saveMessage(ChatwootMessage message) async {
     await _box.put(message.id, message);
     await _messageIdToClientInstanceKeyBox.put(message.id, _clientInstanceKey);
-    print("saved");
   }
 
   @override

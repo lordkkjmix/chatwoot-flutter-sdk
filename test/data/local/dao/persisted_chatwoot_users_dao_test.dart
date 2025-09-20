@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_user_dao.dart';
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_user.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -95,7 +96,7 @@ void main() {
           await mockUserBox.clear();
           await mockClientInstanceKeyToUserBox.clear();
         } on HiveError catch (e) {
-          print(e);
+          debugPrint(e.toString());
         }
       });
     });

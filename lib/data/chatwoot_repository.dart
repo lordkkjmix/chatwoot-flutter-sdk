@@ -152,7 +152,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
         callbacks.onConfirmedSubscription?.call();
       } else if (chatwootEvent.message?.event ==
           ChatwootEventMessageType.message_created) {
-        print("here comes message: $event");
+        debugPrint("here comes message: $event");
         final message = chatwootEvent.message!.data!.getMessage();
         localStorage.messagesDao.saveMessage(message);
         if (message.isMine) {
@@ -163,7 +163,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
         }
       } else if (chatwootEvent.message?.event ==
           ChatwootEventMessageType.message_updated) {
-        print("here comes the updated message: $event");
+        debugPrint("here comes the updated message: $event");
 
         final message = chatwootEvent.message!.data!.getMessage();
         localStorage.messagesDao.saveMessage(message);
@@ -198,7 +198,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
           callbacks.onConversationIsOffline?.call();
         }
       } else {
-        print("chatwoot unknown event: $event");
+        debugPrint("chatwoot unknown event: $event");
       }
     });
     _subscriptions.add(newSubscription);

@@ -4,6 +4,7 @@ import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_conversation_dao.da
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_contact.dart';
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_conversation.dart';
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_message.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -100,7 +101,7 @@ void main() {
           await mockConversationBox.clear();
           await mockClientInstanceKeyToConversationBox.clear();
         } on HiveError catch (e) {
-          print(e);
+          debugPrint(e.toString());
         }
       });
     });
