@@ -34,6 +34,10 @@ class ChatwootWidget extends StatefulWidget {
 
   ///Widget Load completed event
   final void Function()? onLoadCompleted;
+
+  ///Whether to show the close button in the chat widget
+  final bool showCloseButton;
+
   ChatwootWidget(
       {Key? key,
       required this.websiteToken,
@@ -45,7 +49,8 @@ class ChatwootWidget extends StatefulWidget {
       this.onAttachFile,
       this.onLoadStarted,
       this.onLoadProgress,
-      this.onLoadCompleted})
+      this.onLoadCompleted,
+      this.showCloseButton = true})
       : super(key: key);
 
   @override
@@ -71,6 +76,7 @@ class _ChatwootWidgetState extends State<ChatwootWidget> {
       onLoadStarted: widget.onLoadStarted,
       onLoadCompleted: widget.onLoadCompleted,
       onLoadProgress: widget.onLoadProgress,
+      showCloseButton: widget.showCloseButton,
     );
   }
 }
