@@ -1,7 +1,7 @@
 name: chatwoot_flutter_sdk
 description: A flutter client sdk for chatwoot. Integrate Chatwoot flutter client into your flutter app and talk to your visitors/users in real time.
-version: 0.1.0
-homepage: https://github.com/chatwoot/chatwoot-flutter-sdk
+version: 0.1.1
+homepage: https://github.com/lordkkjmix/chatwoot-flutter-sdk/tree/develop
 
 environment:
   sdk: "^3.5.3"
@@ -12,20 +12,16 @@ dependencies:
   flutter_chat_ui: ^1.6.15
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  uuid: ^4.5.1
   web_socket_channel: ^3.0.1
   json_annotation: ^4.9.0
   dio: ^5.7.0
   equatable: ^2.0.5
   riverpod: ^2.6.1
   synchronized: ^3.3.0
-  intl: ^0.20.1
-  flutter_chat_types: ^3.6.2
   webview_flutter: ^4.10.0
   webview_flutter_android: ^4.10.2
+  webview_flutter_wkwebview: ^3.16.0
   flutter_secure_storage: ^9.2.2
-  url_launcher: ^6.3.1
-  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
