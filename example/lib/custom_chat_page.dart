@@ -1,0 +1,449 @@
+import 'package:flutter/material.dart';
+import 'package:chatwoot_sdk/chatwoot_sdk.dart';
+import 'package:chatwoot_sdk/data/remote/requests/chatwoot_action_data.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
+
+/// A fully custom Flutter chat page implementation using Chatwoot SDK
+/// This demonstrates how to build a complete chat interface using pure Flutter widgets
+/// and integrating with the Chatwoot real-time messaging system
+class CustomChatPage extends StatefulWidget {
+  final String baseUrl;
+  final String inboxIdentifier;
+  final ChatwootUser user;
+  final String title;
+
+  const CustomChatPage({
+    super.key,
+    required this.baseUrl,
+    required this.inboxIdentifier,
+    required this.user,
+    this.title = 'Chat',
+  });
+
+  @override
+  State<CustomChatPage> createState() => _CustomChatPageState();
+}
+
+class _CustomChatPageState extends State<CustomChatPage> {
+  ChatwootClient? _chatwootClient;
+  final List<types.Message> _messages = [];
+  bool _isConnected = false;
+  bool _isTyping = false;
+  bool _isAgentOnline = false;
+  String _connectionStatus = 'Connecting...';
+
+  // Create a user for the chat interface
+  late final types.User _user;
+  late final types.User _agent;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeUsers();
+    _initializeChatwoot();
+  }
+
+  void _initializeUsers() {
+    _user = types.User(
+      id: widget.user.identifier ?? 'user',
+      firstName: widget.user.name?.split(' ').first,
+      lastName: widget.user.name?.split(' ').skip(1).join(' '),
+      imageUrl: widget.user.avatarUrl,
+    );
+
+    _agent = const types.User(
+      id: 'agent',
+      firstName: 'Support',
+      lastName: 'Agent',
+    );
+  }
+
+  void _initializeChatwoot() async {
+    try {
+      _chatwootClient = await ChatwootClient.create(
+        baseUrl: widget.baseUrl,
+        inboxIdentifier: widget.inboxIdentifier,
+        user: widget.user,
+        enablePersistence: true,
+        callbacks: ChatwootCallbacks(
+          onWelcome: () {
+            setState(() {
+              _connectionStatus = 'Connected';
+            });
+          },
+          onConfirmedSubscription: () {
+            setState(() {
+              _isConnected = true;
+              _connectionStatus = 'Connected';
+            });
+            _loadMessages();
+          },
+          onConversationStartedTyping: () {
+            setState(() {
+              _isTyping = true;
+            });
+          },
+          onConversationStoppedTyping: () {
+            setState(() {
+              _isTyping = false;
+            });
+          },
+          onConversationIsOnline: () {
+            setState(() {
+              _isAgentOnline = true;
+            });
+          },
+          onConversationIsOffline: () {
+            setState(() {
+              _isAgentOnline = false;
+            });
+          },
+          onMessageReceived: (message) {
+            _addMessage(_convertChatwootMessageToType(message, _agent));
+          },
+          onMessageSent: (message, echoId) {
+            // Message already added when sending
+          },
+          onMessageDelivered: (message, echoId) {
+            _updateMessageStatus(echoId, types.Status.delivered);
+          },
+          onPersistedMessagesRetrieved: (messages) {
+            _loadPersistedMessages(messages);
+          },
+          onMessagesRetrieved: (messages) {
+            _loadRemoteMessages(messages);
+          },
+          onError: (error) {
+            setState(() {
+              _connectionStatus = 'Error: ${error.type}';
+            });
+            _showErrorSnackBar('Error: ${error.toString()}');
+          },
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _connectionStatus = 'Failed to connect';
+      });
+      _showErrorSnackBar('Failed to initialize chat: $e');
+    }
+  }
+
+  void _loadMessages() {
+    _chatwootClient?.loadMessages();
+  }
+
+  void _loadPersistedMessages(List<ChatwootMessage> messages) {
+    setState(() {
+      final convertedMessages = messages
+          .map((msg) => _convertChatwootMessageToType(
+              msg, msg.messageType == 1 ? _user : _agent))
+          .toList();
+      _messages.insertAll(0, convertedMessages.reversed);
+    });
+  }
+
+  void _loadRemoteMessages(List<ChatwootMessage> messages) {
+    setState(() {
+      _messages.clear();
+      final convertedMessages = messages
+          .map((msg) => _convertChatwootMessageToType(
+              msg, msg.messageType == 1 ? _user : _agent))
+          .toList();
+      _messages.addAll(convertedMessages.reversed);
+    });
+  }
+
+  types.Message _convertChatwootMessageToType(ChatwootMessage chatwootMessage, types.User author) {
+    // Handle different message types
+    if (chatwootMessage.attachments?.isNotEmpty == true) {
+      final attachment = chatwootMessage.attachments!.first;
+      if (attachment.fileType != null && attachment.fileType!.startsWith('image/')) {
+        return types.ImageMessage(
+          author: author,
+          createdAt: DateTime.parse(chatwootMessage.createdAt).millisecondsSinceEpoch,
+          id: chatwootMessage.id.toString(),
+          name: attachment.dataUrl?.split('/').last ?? 'image',
+          size: attachment.fileType?.length.toDouble() ?? 0,
+          uri: attachment.dataUrl ?? '',
+        );
+      } else {
+        return types.FileMessage(
+          author: author,
+          createdAt: DateTime.parse(chatwootMessage.createdAt).millisecondsSinceEpoch,
+          id: chatwootMessage.id.toString(),
+          name: attachment.dataUrl?.split('/').last ?? 'file',
+          size: attachment.fileType?.length.toDouble() ?? 0,
+          uri: attachment.dataUrl ?? '',
+        );
+      }
+    }
+
+    // Default to text message
+    return types.TextMessage(
+      author: author,
+      createdAt: DateTime.parse(chatwootMessage.createdAt).millisecondsSinceEpoch,
+      id: chatwootMessage.id.toString(),
+      text: chatwootMessage.content ?? '',
+    );
+  }
+
+  void _addMessage(types.Message message) {
+    setState(() {
+      _messages.insert(0, message);
+    });
+  }
+
+  void _updateMessageStatus(String messageId, types.Status status) {
+    setState(() {
+      final index = _messages.indexWhere((msg) => msg.id == messageId);
+      if (index != -1) {
+        final message = _messages[index];
+        if (message is types.TextMessage) {
+          _messages[index] = message.copyWith(status: status);
+        }
+      }
+    });
+  }
+
+  void _handleSendPressed(types.PartialText message) {
+    if (_chatwootClient == null || !_isConnected) {
+      _showErrorSnackBar('Not connected to chat service');
+      return;
+    }
+
+    final echoId = const Uuid().v4();
+    final textMessage = types.TextMessage(
+      author: _user,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      id: echoId,
+      text: message.text,
+      status: types.Status.sending,
+    );
+
+    _addMessage(textMessage);
+
+    // Send message through Chatwoot client
+    _chatwootClient!.sendMessage(
+      content: message.text,
+      echoId: echoId,
+    );
+
+    // Update presence
+    _chatwootClient!.sendAction(ChatwootActionType.update_presence);
+  }
+
+  void _handleAttachmentPressed() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final fileMessage = types.FileMessage(
+          author: _user,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          id: const Uuid().v4(),
+          name: file.name,
+          size: file.size,
+          uri: file.path ?? '',
+        );
+
+        _addMessage(fileMessage);
+
+        // Note: In a real implementation, you would upload the file
+        // and send the file URL through the Chatwoot API
+        _showErrorSnackBar('File attachments require server-side implementation');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error selecting file: $e');
+    }
+  }
+
+  void _handleMessageTap(types.Message message) {
+    if (message is types.FileMessage) {
+      // Handle file opening
+      _showErrorSnackBar('File opening not implemented in demo');
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    if (!_isTyping) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).primaryColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Agent is typing...',
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionStatus() {
+    Color statusColor = _isConnected ? Colors.green : Colors.red;
+    IconData statusIcon = _isConnected ? Icons.check_circle : Icons.error;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.1),
+        border: Border(bottom: BorderSide(color: statusColor.withValues(alpha: 0.3))),
+      ),
+      child: Row(
+        children: [
+          Icon(statusIcon, size: 16, color: statusColor),
+          const SizedBox(width: 8),
+          Text(
+            _connectionStatus,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const Spacer(),
+          if (_isAgentOnline)
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'Online',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _chatwootClient?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadMessages,
+            tooltip: 'Refresh messages',
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'clear':
+                  _chatwootClient?.clearClientData();
+                  setState(() {
+                    _messages.clear();
+                  });
+                  break;
+                case 'reconnect':
+                  _initializeChatwoot();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.clear_all),
+                    SizedBox(width: 8),
+                    Text('Clear Chat'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'reconnect',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh),
+                    SizedBox(width: 8),
+                    Text('Reconnect'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildConnectionStatus(),
+          Expanded(
+            child: Chat(
+              messages: _messages,
+              onSendPressed: _handleSendPressed,
+              onAttachmentPressed: _handleAttachmentPressed,
+              onMessageTap: (context, message) => _handleMessageTap(message),
+              user: _user,
+              showUserAvatars: true,
+              showUserNames: true,
+              theme: DefaultChatTheme(
+                primaryColor: Theme.of(context).primaryColor,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                inputBackgroundColor: Theme.of(context).cardColor,
+                inputTextColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                messageBorderRadius: 16,
+                userAvatarNameColors: [Theme.of(context).primaryColor],
+              ),
+              customBottomWidget: _buildTypingIndicator(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
