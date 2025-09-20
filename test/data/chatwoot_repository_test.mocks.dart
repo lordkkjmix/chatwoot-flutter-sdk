@@ -6,24 +6,24 @@
 import 'dart:async' as _i11;
 
 import 'package:async/async.dart' as _i18;
-import 'package:chatwoot_sdk/chatwoot_callbacks.dart' as _i16;
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_contact_dao.dart' as _i4;
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_conversation_dao.dart'
+import 'package:chatwoot_flutter_sdk/chatwoot_callbacks.dart' as _i16;
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_contact_dao.dart' as _i4;
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_conversation_dao.dart'
     as _i3;
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_messages_dao.dart' as _i5;
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_user_dao.dart' as _i2;
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_contact.dart' as _i6;
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_conversation.dart'
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_messages_dao.dart' as _i5;
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_user_dao.dart' as _i2;
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_contact.dart' as _i6;
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_conversation.dart'
     as _i13;
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_message.dart' as _i7;
-import 'package:chatwoot_sdk/data/local/local_storage.dart' as _i10;
-import 'package:chatwoot_sdk/data/remote/chatwoot_client_exception.dart'
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_message.dart' as _i7;
+import 'package:chatwoot_flutter_sdk/data/local/local_storage.dart' as _i10;
+import 'package:chatwoot_flutter_sdk/data/remote/chatwoot_client_exception.dart'
     as _i17;
-import 'package:chatwoot_sdk/data/remote/requests/chatwoot_action_data.dart'
+import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_action_data.dart'
     as _i15;
-import 'package:chatwoot_sdk/data/remote/requests/chatwoot_new_message_request.dart'
+import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_new_message_request.dart'
     as _i14;
-import 'package:chatwoot_sdk/data/remote/service/chatwoot_client_service.dart'
+import 'package:chatwoot_flutter_sdk/data/remote/service/chatwoot_client_service.dart'
     as _i12;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:stream_channel/stream_channel.dart' as _i9;

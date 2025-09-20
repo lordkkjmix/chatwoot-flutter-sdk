@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:chatwoot_sdk/chatwoot_sdk.dart';
-import 'package:chatwoot_sdk/data/remote/requests/chatwoot_action_data.dart';
+import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
+import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_action_data.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';

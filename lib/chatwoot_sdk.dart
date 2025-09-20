@@ -1,9 +1,9 @@
-library chatwoot_sdk;
+library chatwoot_flutter_sdk;
 
-export 'package:chatwoot_sdk/data/local/entity/chatwoot_message.dart';
-export 'package:chatwoot_sdk/data/local/entity/chatwoot_user.dart';
-export 'package:chatwoot_sdk/data/remote/chatwoot_client_exception.dart';
-export 'package:chatwoot_sdk/ui/webview_widget/chatwoot_widget.dart';
+export 'data/local/entity/chatwoot_message.dart';
+export 'data/local/entity/chatwoot_user.dart';
+export 'data/remote/chatwoot_client_exception.dart';
+export 'ui/webview_widget/chatwoot_widget.dart';
 
 export 'chatwoot_callbacks.dart';
 export 'chatwoot_client.dart';

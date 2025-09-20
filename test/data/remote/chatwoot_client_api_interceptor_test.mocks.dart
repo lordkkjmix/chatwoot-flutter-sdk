@@ -5,11 +5,11 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i7;
 
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_contact.dart' as _i4;
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_conversation.dart'
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_contact.dart' as _i4;
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_conversation.dart'
     as _i5;
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_user.dart' as _i13;
-import 'package:chatwoot_sdk/data/remote/service/chatwoot_client_auth_service.dart'
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_user.dart' as _i13;
+import 'package:chatwoot_flutter_sdk/data/remote/service/chatwoot_client_auth_service.dart'
     as _i11;
 import 'package:dio/dio.dart' as _i6;
 import 'package:dio/src/dio.dart' as _i3;

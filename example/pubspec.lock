@@ -25,13 +25,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
-  chatwoot_sdk:
+  chatwoot_flutter_sdk:
     dependency: "direct main"
     description:
       path: ".."
       relative: true
     source: path
-    version: "0.0.9"
+    version: "0.0.1"
   clock:
     dependency: transitive
     description:

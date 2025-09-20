@@ -5,15 +5,15 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i6;
 
-import 'package:chatwoot_sdk/chatwoot_callbacks.dart' as _i4;
-import 'package:chatwoot_sdk/data/chatwoot_repository.dart' as _i5;
-import 'package:chatwoot_sdk/data/local/entity/chatwoot_user.dart' as _i7;
-import 'package:chatwoot_sdk/data/local/local_storage.dart' as _i3;
-import 'package:chatwoot_sdk/data/remote/requests/chatwoot_action_data.dart'
+import 'package:chatwoot_flutter_sdk/chatwoot_callbacks.dart' as _i4;
+import 'package:chatwoot_flutter_sdk/data/chatwoot_repository.dart' as _i5;
+import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_user.dart' as _i7;
+import 'package:chatwoot_flutter_sdk/data/local/local_storage.dart' as _i3;
+import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_action_data.dart'
     as _i9;
-import 'package:chatwoot_sdk/data/remote/requests/chatwoot_new_message_request.dart'
+import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_new_message_request.dart'
     as _i8;
-import 'package:chatwoot_sdk/data/remote/service/chatwoot_client_service.dart'
+import 'package:chatwoot_flutter_sdk/data/remote/service/chatwoot_client_service.dart'
     as _i2;
 import 'package:mockito/mockito.dart' as _i1;
 

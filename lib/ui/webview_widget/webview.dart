@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chatwoot_sdk/chatwoot_sdk.dart';
-import 'package:chatwoot_sdk/ui/webview_widget/utils.dart';
+import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
+import 'package:chatwoot_flutter_sdk/ui/webview_widget/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';

@@ -1,14 +1,14 @@
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_contact_dao.dart';
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_conversation_dao.dart';
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_messages_dao.dart';
-import 'package:chatwoot_sdk/data/local/dao/chatwoot_user_dao.dart';
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_contact_dao.dart';
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_conversation_dao.dart';
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_messages_dao.dart';
+import 'package:chatwoot_flutter_sdk/data/local/dao/chatwoot_user_dao.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'entity/chatwoot_contact.dart';
 import 'entity/chatwoot_conversation.dart';
 import 'entity/chatwoot_message.dart';
 import 'entity/chatwoot_user.dart';
-import 'package:chatwoot_sdk/data/remote/responses/chatwoot_event.dart';
+import 'package:chatwoot_flutter_sdk/data/remote/responses/chatwoot_event.dart';
 
 const CHATWOOT_CONTACT_HIVE_TYPE_ID = 0;
 const CHATWOOT_CONVERSATION_HIVE_TYPE_ID = 1;

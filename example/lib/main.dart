@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:chatwoot_sdk/chatwoot_sdk.dart';
-import 'package:chatwoot_sdk/data/remote/requests/chatwoot_action_data.dart';
+import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
+import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_action_data.dart';
 import 'package:file_picker/file_picker.dart';
 import 'custom_chat_page.dart';
 
