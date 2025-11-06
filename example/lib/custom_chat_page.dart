@@ -1,10 +1,15 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
+
 import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
 import 'package:chatwoot_flutter_sdk/data/remote/requests/chatwoot_action_data.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
-import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
+import 'package:mime/mime.dart';
 
 /// A fully custom Flutter chat page implementation using Chatwoot SDK
 /// This demonstrates how to build a complete chat interface using pure Flutter widgets
@@ -34,6 +39,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
   bool _isTyping = false;
   bool _isAgentOnline = false;
   String _connectionStatus = 'Connecting...';
+  final TextEditingController _controller = TextEditingController();
 
   // Create a user for the chat interface
   late final types.User _user;
@@ -42,7 +48,9 @@ class _CustomChatPageState extends State<CustomChatPage> {
   @override
   void initState() {
     super.initState();
+    _requestPermissions();
     _initializeUsers();
+    _controller.dispose();
     _initializeChatwoot();
   }
 
@@ -59,6 +67,15 @@ class _CustomChatPageState extends State<CustomChatPage> {
       firstName: 'Support',
       lastName: 'Agent',
     );
+  }
+
+  // helper para pedir permisos
+  Future<void> _requestPermissions() async {
+    await Permission.microphone.request();
+    await Permission.camera.request();
+    await Permission.storage.request();
+    await Permission.photos.request();
+    await Permission.phone.request();
   }
 
   void _initializeChatwoot() async {
@@ -102,12 +119,14 @@ class _CustomChatPageState extends State<CustomChatPage> {
             });
           },
           onMessageReceived: (message) {
+            print('>>>>>>>>>>>> onMessageReceived');
             _addMessage(_convertChatwootMessageToType(message, _agent));
           },
           onMessageSent: (message, echoId) {
             // Message already added when sending
           },
           onMessageDelivered: (message, echoId) {
+            print('>>>>>>>>>>>> onMessageDelivered');
             _updateMessageStatus(echoId, types.Status.delivered);
           },
           onPersistedMessagesRetrieved: (messages) {
@@ -121,6 +140,9 @@ class _CustomChatPageState extends State<CustomChatPage> {
               _connectionStatus = 'Error: ${error.type}';
             });
             _showErrorSnackBar('Error: ${error.toString()}');
+          },
+          onConversationResolved: () {
+
           },
         ),
       );
@@ -161,24 +183,57 @@ class _CustomChatPageState extends State<CustomChatPage> {
     // Handle different message types
     if (chatwootMessage.attachments?.isNotEmpty == true) {
       final attachment = chatwootMessage.attachments!.first;
-      if (attachment.fileType != null && attachment.fileType!.startsWith('image/')) {
-        return types.ImageMessage(
-          author: author,
-          createdAt: DateTime.parse(chatwootMessage.createdAt).millisecondsSinceEpoch,
-          id: chatwootMessage.id.toString(),
-          name: attachment.dataUrl?.split('/').last ?? 'image',
-          size: attachment.fileType?.length.toDouble() ?? 0,
-          uri: attachment.dataUrl ?? '',
-        );
-      } else {
-        return types.FileMessage(
-          author: author,
-          createdAt: DateTime.parse(chatwootMessage.createdAt).millisecondsSinceEpoch,
-          id: chatwootMessage.id.toString(),
-          name: attachment.dataUrl?.split('/').last ?? 'file',
-          size: attachment.fileType?.length.toDouble() ?? 0,
-          uri: attachment.dataUrl ?? '',
-        );
+      print('>>>>>>>>>>>> $attachment');
+      //print('>>>>>>>>>>>> ${attachment.file_type}');
+      if (attachment is Map<String, dynamic>) {
+        print('>>>>>>>>>>>> ${attachment['file_type']}');
+
+        final fileType = attachment['file_type']?.toString();
+        final dataUrl = attachment['data_url']?.toString();
+        if (fileType != null && fileType == 'image') { //!.startsWith('image/')
+          return types.ImageMessage(
+            author: author,
+            createdAt: DateTime
+                .parse(chatwootMessage.createdAt)
+                .millisecondsSinceEpoch,
+            id: chatwootMessage.id.toString(),
+            name: dataUrl
+                ?.split('/')
+                .last ?? 'image',
+            size: fileType?.length.toDouble() ?? 0,
+            uri: dataUrl ?? '',
+          );
+        } else {
+          if (fileType != null && fileType == 'audio') {
+            print('>>>>>>>>>>>> Ingreso audios jkkjsdkjsajkd ');
+            return types.AudioMessage(
+              author: author,
+              createdAt: DateTime
+                  .parse(chatwootMessage.createdAt)
+                  .millisecondsSinceEpoch,
+              id: chatwootMessage.id.toString(),
+              name: dataUrl
+                  ?.split('/')
+                  .last ?? 'audio',
+              size: fileType?.length.toDouble() ?? 0,
+              uri: dataUrl ?? '',
+              duration: Duration(seconds: 10),
+            );
+          } else {
+            return types.FileMessage(
+              author: author,
+              createdAt: DateTime
+                  .parse(chatwootMessage.createdAt)
+                  .millisecondsSinceEpoch,
+              id: chatwootMessage.id.toString(),
+              name: dataUrl
+                  ?.split('/')
+                  .last ?? 'file',
+              size: fileType?.length.toDouble() ?? 0,
+              uri: dataUrl ?? '',
+            );
+          }
+        }
       }
     }
 
@@ -244,21 +299,113 @@ class _CustomChatPageState extends State<CustomChatPage> {
       );
 
       if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final fileMessage = types.FileMessage(
+        String filePath = result.files.single.path!;
+        String fileName = result.files.single.name;
+        final fileTemp = result.files.first;
+
+        // Detectar tipo MIME
+        final mimeType = lookupMimeType(filePath) ?? '';
+        print('Tipo MIME detectado: $mimeType');
+
+        // Determinar tipo de archivo según MIME
+        String fileType;
+        if (mimeType.startsWith('image/')) {
+          fileType = 'image';
+        } else if (mimeType.startsWith('audio/')) {
+          fileType = 'audio';
+        } else if (mimeType.startsWith('video/')) {
+          fileType = 'video';
+        } else {
+          fileType = 'file';
+        }
+
+        print('Tipo clasificado: $fileType');
+
+        // Convert the file to base64
+        List<int> fileBytes = await File(filePath).readAsBytes();
+
+        //convert filepath into uri
+        final tempUri = (await getTemporaryDirectory()).uri.resolve(fileName);
+        final file = await File.fromUri(tempUri).create(recursive: true);
+        //convert file in bytes
+        final resultPath = await file.writeAsBytes(fileBytes, flush: true);
+
+        print('>>>>>>>>>>>>> $file');
+
+        final echoId = const Uuid().v4();
+
+        // return [file.uri.toString()];
+
+        // Aquí puedes actuar según el tipo
+        switch (fileType) {
+          case 'image':
+          // Mostrar vista previa o enviarlo como imagen
+          //final file = result.files.first;
+            final fileMessage = types.ImageMessage(
+              author: _user,
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+              id: const Uuid().v4(),
+              name: fileName,
+              size: fileTemp.size,
+              uri: resultPath.uri.toString(),
+            );
+            _addMessage(fileMessage);
+            break;
+          case 'audio':
+          // Enviar al API o mostrar reproductor
+          //final file = result.files.first;
+            final fileMessage = types.AudioMessage(
+              author: _user,
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+              id: const Uuid().v4(),
+              name: fileName,
+              size: fileTemp.size,
+              uri: resultPath.uri.toString(),
+              duration: Duration(seconds: 10)
+            );
+            _addMessage(fileMessage);
+            break;
+          default:
+          //final file = result.files.first;
+            final fileMessage = types.FileMessage(
+              author: _user,
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+              id: const Uuid().v4(),
+              name: fileName,
+              size: fileTemp.size,
+              uri: resultPath.uri.toString(),
+            );
+            _addMessage(fileMessage);
+            break;
+        }
+
+
+        //final file = result.files.first;
+        /*final fileMessage = types.FileMessage(
           author: _user,
           createdAt: DateTime.now().millisecondsSinceEpoch,
           id: const Uuid().v4(),
-          name: file.name,
-          size: file.size,
-          uri: file.path ?? '',
+          name: fileName,
+          size: fileTemp.size,
+          uri: resultPath.uri.toString(),
         );
 
-        _addMessage(fileMessage);
+        _addMessage(fileMessage);*/
+
+
+        // Send message through Chatwoot client
+         _chatwootClient!.sendMessage(
+            content: "https://images.unsplash.com/photo-1689308271305-58e75832289b?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1yZWxhdGVkfDE0fHx8ZW58MHx8fHx8",
+            echoId: echoId,
+          );
+         //_chatwootClient.sendMessage(content: content, echoId: echoId)
+
+        // Update presence
+        //_chatwootClient!.sendAction(ChatwootActionType.update_presence);
 
         // Note: In a real implementation, you would upload the file
         // and send the file URL through the Chatwoot API
-        _showErrorSnackBar('File attachments require server-side implementation');
+        // _showErrorSnackBar('File attachments require server-side implementation');
       }
     } catch (e) {
       _showErrorSnackBar('Error selecting file: $e');
@@ -431,6 +578,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
               user: _user,
               showUserAvatars: true,
               showUserNames: true,
+
               theme: DefaultChatTheme(
                 primaryColor: Theme.of(context).primaryColor,
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -439,7 +587,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
                 messageBorderRadius: 16,
                 userAvatarNameColors: [Theme.of(context).primaryColor],
               ),
-              customBottomWidget: _buildTypingIndicator(),
+              //customBottomWidget: _buildTypingIndicator(),
             ),
           ),
         ],

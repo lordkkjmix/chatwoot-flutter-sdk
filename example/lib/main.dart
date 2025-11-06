@@ -38,8 +38,9 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
   final List<String> _messages = [];
 
   // Demo configuration - Replace with your actual Chatwoot instance details
-  final String _baseUrl = 'https://app.chatwoot.app';
-  final String _inboxIdentifier = 'FJuAD272ZhPMDPmc4ciorqx7d4F';
+  final String _baseUrl = 'https://chatwoot.clipp.app';
+  final String _inboxIdentifier = 'QW7mgWQG7a5Tz2sfJUYVrLP3';
+  final String _websiteToken = 'LDKg51ije4poZ7Yi46k1iK8P';
 
   @override
   void initState() {
@@ -173,7 +174,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
         builder: (context) => Scaffold(
           appBar: AppBar(title: const Text('Chatwoot Chat')),
           body: ChatwootWidget(
-            websiteToken: _inboxIdentifier,
+            websiteToken: _websiteToken,
             baseUrl: _baseUrl,
             user: ChatwootUser(
               identifier: 'user@example.com',
@@ -245,7 +246,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
               ),
               Expanded(
                 child: ChatwootWidget(
-                  websiteToken: _inboxIdentifier,
+                  websiteToken: _websiteToken,
                   baseUrl: _baseUrl,
                   user: ChatwootUser(
                     identifier: 'user@example.com',

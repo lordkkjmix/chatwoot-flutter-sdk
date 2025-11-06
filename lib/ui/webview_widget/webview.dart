@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
 import 'package:chatwoot_flutter_sdk/ui/webview_widget/utils.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart'
     as webview_flutter_android;
@@ -70,11 +74,13 @@ class _WebviewState extends State<Webview> {
   @override
   void initState() {
     super.initState();
+    _requestPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       String webviewUrl = widget.widgetUrl;
       final cwCookie = await StoreHelper.getCookie();
       if (cwCookie.isNotEmpty) {
         webviewUrl = "${webviewUrl}&cw_conversation=${cwCookie}";
+        log("Chatwoot webviewUrl: ${webviewUrl}");
       }
       setState(() {
         _controller = WebViewController()
@@ -101,7 +107,7 @@ class _WebviewState extends State<Webview> {
           )
           ..addJavaScriptChannel("ReactNativeWebView",
               onMessageReceived: (JavaScriptMessage jsMessage) {
-            debugPrint("Chatwoot message received: ${jsMessage.message}");
+            log("Chatwoot message received: ${jsMessage.message}");
             final message = getMessage(jsMessage.message);
             if (isJsonString(message)) {
               final parsedMessage = jsonDecode(message);
@@ -123,15 +129,28 @@ class _WebviewState extends State<Webview> {
         if (Platform.isAndroid && widget.onAttachFile != null) {
           final androidController = _controller!.platform
               as webview_flutter_android.AndroidWebViewController;
-          androidController
-              .setOnShowFileSelector((_) => widget.onAttachFile!.call());
+          androidController.setOnShowFileSelector(_androidFilePicker);
+
+         /* androidController
+              .setOnShowFileSelector((_) => widget.onAttachFile!.call());*/
+
+          // Si quieres, habilita reproducción automática de media sin gesto
+          // (dependiendo de versión de webview_flutter)
+          try {
+            androidController.setMediaPlaybackRequiresUserGesture(false);
+            // Este método permite capturar permisos solicitados por la web (como micrófono)
+            androidController.setOnPlatformPermissionRequest((request) async {
+              await request.grant();
+            });
+          } catch (_) {}
+
         }
 
         if (Platform.isIOS) {
           // iOS-specific configuration for better Chatwoot WebView compatibility
           final wkWebViewController =
               _controller!.platform as WebKitWebViewController;
-
+          wkWebViewController.setAllowsBackForwardNavigationGestures(true);
           // Set user agent to ensure proper Chatwoot rendering
           wkWebViewController.setUserAgent(
               'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 ChatwootFlutterSDK/0.1.0');
@@ -140,10 +159,69 @@ class _WebviewState extends State<Webview> {
     });
   }
 
+  // helper para pedir permisos
+  Future<void> _requestPermissions() async {
+    await Permission.microphone.request();
+    await Permission.camera.request();
+    await Permission.storage.request();
+    await Permission.photos.request();
+    await Permission.phone.request();
+  }
+
+  Future<List<String>> _androidFilePicker(webview_flutter_android.FileSelectorParams params) async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type:FileType.any);
+
+    if (result != null) {
+      String filePath = result.files.single.path!;
+      String fileName = result.files.single.name;
+
+      // Convert the file to base64
+      List<int> fileBytes = await File(filePath).readAsBytes();
+
+      //convert filepath into uri
+      final filePath1 = (await getTemporaryDirectory()).uri.resolve(fileName);
+      final file = await File.fromUri(filePath1).create(recursive: true);
+      print('>>>>>>>>>>>>> $file');
+
+      //convert file in bytes
+      await file.writeAsBytes(fileBytes, flush: true);
+
+      return [file.uri.toString()];
+    }
+
+    return [];
+  }
+
+  Future<void> _recordAudioAndSend() async {
+    /*final recorder = FlutterSoundRecorder();
+    await recorder.openRecorder();
+    await recorder.startRecorder(toFile: 'audio.aac');
+
+    // Esperas unos segundos o agregas un botón para detener
+    final path = await recorder.stopRecorder();
+
+    // Subes a tu backend o Chatwoot API
+    final audioBytes = await File(path!).readAsBytes();
+    await sendAttachmentToChatwoot(audioBytes, "audio.aac", "audio/aac");*/
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return _controller != null
-        ? WebViewWidget(controller: _controller!)
+        ? Stack(
+          children: [
+            WebViewWidget(controller: _controller!),
+           /* Positioned(
+              top: 40,
+              right: 65,
+              child: IconButton(
+                onPressed: _recordAudioAndSend,
+                icon: const Icon(Icons.mic),
+              ),
+            ),*/
+          ],
+        )
         : SizedBox();
   }
 }
