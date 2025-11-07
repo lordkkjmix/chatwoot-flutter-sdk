@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_contact.dart';
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_conversation.dart';
@@ -28,6 +29,10 @@ abstract class ChatwootClientService {
   Future<List<ChatwootConversation>> getConversations();
 
   Future<ChatwootMessage> createMessage(ChatwootNewMessageRequest request);
+
+  Future<ChatwootMessage> sendMessageAudio(ChatwootNewMessageRequest request, File audioFile);
+
+  Future<ChatwootMessage> sendMessageMedia(ChatwootNewMessageRequest request, File media);
 
   Future<ChatwootMessage> updateMessage(String messageIdentifier, update);
 
@@ -63,6 +68,157 @@ class ChatwootClientServiceImpl extends ChatwootClientService {
           e.message ?? '', ChatwootClientExceptionType.SEND_MESSAGE_FAILED);
     }
   }
+
+  @override
+  Future<ChatwootMessage> sendMessageAudio(
+      ChatwootNewMessageRequest request, File audioFile) async {
+    try {
+      // Prepara el FormData (multipart)
+      final formData = FormData.fromMap({
+        'content': '🎤 Audio',
+        'message_type': 'incoming',
+        'attachments[]': await MultipartFile.fromFile(
+          audioFile.path,
+          filename: audioFile.path.split('/').last,
+          contentType: DioMediaType.parse('audio/aac'),
+        ),
+      });
+
+      // Construye la URL pública de Chatwoot (usando placeholders dinámicos)
+      final url =
+          "/public/api/v1/inboxes/${ChatwootClientApiInterceptor.INTERCEPTOR_INBOX_IDENTIFIER_PLACEHOLDER}/contacts/${ChatwootClientApiInterceptor.INTERCEPTOR_CONTACT_IDENTIFIER_PLACEHOLDER}/conversations/${ChatwootClientApiInterceptor.INTERCEPTOR_CONVERSATION_IDENTIFIER_PLACEHOLDER}/messages";
+
+      // Envía el archivo usando Dio
+      final response = await _dio.post(url, data: formData);
+
+      // Validación de respuesta
+      if ((response.statusCode ?? 0).isBetween(199, 300)) { //if ((response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300) {
+        print('✅ Audio enviado correctamente a Chatwoot');
+        return ChatwootMessage.fromJson(response.data);
+      } else {
+        print('❌ Error al enviar audio: ${response.statusCode}');
+        print(response.data);
+        throw ChatwootClientException(response.statusMessage ?? "unknown error",
+            ChatwootClientExceptionType.SEND_MESSAGE_FAILED);
+      }
+    } on DioException catch (e) {
+      print('🚨 Error Dio al enviar audio: ${e.response?.statusCode}');
+      print(e.response?.data ?? e.message);
+      throw ChatwootClientException(
+          e.message ?? '', ChatwootClientExceptionType.SEND_MESSAGE_FAILED);
+    } catch (e) {
+      print('⚠️ Error inesperado: $e');
+      throw ChatwootClientException(
+          '', ChatwootClientExceptionType.SEND_MESSAGE_FAILED);
+    }
+  }
+
+
+  @override
+  Future<ChatwootMessage> sendMessageMedia(
+      ChatwootNewMessageRequest request,
+      File file,
+      ) async {
+    try {
+      final fileName = file.path.split('/').last;
+      final extension = fileName.split('.').last.toLowerCase();
+
+      // Determinar tipo MIME según extensión
+      String mimeType;
+      String emojiLabel;
+      switch (extension) {
+        case 'mp3':
+        case 'aac':
+        case 'wav':
+        case 'm4a':
+          mimeType = 'audio/$extension';
+          emojiLabel = '🎤 Audio message';
+          break;
+
+        case 'mp4':
+        case 'mov':
+        case 'avi':
+        case 'mkv':
+        case 'webm':
+          mimeType = 'video/$extension';
+          emojiLabel = '🎥 Video message';
+          break;
+
+        case 'jpg':
+        case 'jpeg':
+          mimeType = 'image/jpeg';
+          emojiLabel = '🖼️ Image message';
+          break;
+        case 'png':
+          mimeType = 'image/png';
+          emojiLabel = '🖼️ Image message';
+          break;
+        case 'gif':
+          mimeType = 'image/gif';
+          emojiLabel = '🖼️ Image message';
+          break;
+        case 'webp':
+          mimeType = 'image/webp';
+          emojiLabel = '🖼️ Image message';
+          break;
+        default:
+          mimeType = 'application/octet-stream';
+          emojiLabel = '📎 File message';
+          break;
+      }
+
+      // Obtener el mapa del request y valores seguros
+      final Map<String, dynamic> reqMap = request.toJson();
+      final messageType = (reqMap['message_type'] as String?) ??
+          (reqMap['messageType'] as String?) ??
+          'incoming';
+      // Preparar datos para envío
+      final formData = FormData.fromMap({
+        'content': request.content.isNotEmpty == true
+            ? request.content
+            : emojiLabel,
+        'message_type': messageType,
+        'attachments[]': await MultipartFile.fromFile(
+          file.path,
+          filename: fileName,
+          contentType: DioMediaType.parse(mimeType),
+        ),
+      });
+      print('>>>>>>>>>>>   formData >>> ${formData}');
+      // Construcción de URL (usa placeholders del interceptor)
+      final url =
+          "/public/api/v1/inboxes/${ChatwootClientApiInterceptor.INTERCEPTOR_INBOX_IDENTIFIER_PLACEHOLDER}/contacts/${ChatwootClientApiInterceptor.INTERCEPTOR_CONTACT_IDENTIFIER_PLACEHOLDER}/conversations/${ChatwootClientApiInterceptor.INTERCEPTOR_CONVERSATION_IDENTIFIER_PLACEHOLDER}/messages";
+
+      // Envío de archivo
+      final response = await _dio.post(url, data: formData);
+
+      if ((response.statusCode ?? 0).isBetween(199, 300)) { //((response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300) {
+        print('✅ Archivo ($mimeType) enviado correctamente a Chatwoot');
+        return ChatwootMessage.fromJson(response.data);
+      } else {
+        print('❌ Error al enviar archivo: ${response.statusCode}');
+        print(response.data);
+        throw ChatwootClientException(
+          response.statusMessage ?? "unknown error",
+          ChatwootClientExceptionType.SEND_MESSAGE_FAILED,
+        );
+      }
+    } on DioException catch (e) {
+      print('🚨 Error Dio al enviar archivo: ${e.response?.statusCode}');
+      print(e.response?.data ?? e.message);
+      throw ChatwootClientException(
+        e.message ?? '',
+        ChatwootClientExceptionType.SEND_MESSAGE_FAILED,
+      );
+    } catch (e) {
+      print('⚠️ Error inesperado: $e');
+      throw ChatwootClientException(
+        e.toString(),
+        ChatwootClientExceptionType.SEND_MESSAGE_FAILED,
+      );
+    }
+  }
+
 
   ///Gets all messages of current chatwoot client instance's conversation
   @override

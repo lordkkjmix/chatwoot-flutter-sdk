@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:flutter_sound/public/flutter_sound_recorder.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -41,6 +42,9 @@ class _CustomChatPageState extends State<CustomChatPage> {
   String _connectionStatus = 'Connecting...';
   final TextEditingController _controller = TextEditingController();
 
+  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  bool _isRecording = false;
+
   // Create a user for the chat interface
   late final types.User _user;
   late final types.User _agent;
@@ -52,6 +56,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
     _initializeUsers();
     _controller.dispose();
     _initializeChatwoot();
+    _initRecorder();
   }
 
   void _initializeUsers() {
@@ -349,6 +354,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
               size: fileTemp.size,
               uri: resultPath.uri.toString(),
             );
+            _chatwootClient!.sendMessageMedia(content: "Imagen", echoId: echoId, media: resultPath);
             _addMessage(fileMessage);
             break;
           case 'audio':
@@ -363,6 +369,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
               uri: resultPath.uri.toString(),
               duration: Duration(seconds: 10)
             );
+            //_chatwootClient!.sendMessageAudio(content: "Audio", echoId: echoId, fileAudio: resultPath);
             _addMessage(fileMessage);
             break;
           default:
@@ -375,6 +382,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
               size: fileTemp.size,
               uri: resultPath.uri.toString(),
             );
+            _chatwootClient!.sendMessageMedia(content: "Video", echoId: echoId, media: resultPath);
             _addMessage(fileMessage);
             break;
         }
@@ -394,10 +402,10 @@ class _CustomChatPageState extends State<CustomChatPage> {
 
 
         // Send message through Chatwoot client
-         _chatwootClient!.sendMessage(
+        /* _chatwootClient!.sendMessage(
             content: "https://images.unsplash.com/photo-1689308271305-58e75832289b?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1yZWxhdGVkfDE0fHx8ZW58MHx8fHx8",
             echoId: echoId,
-          );
+          );*/
          //_chatwootClient.sendMessage(content: content, echoId: echoId)
 
         // Update presence
@@ -426,6 +434,44 @@ class _CustomChatPageState extends State<CustomChatPage> {
         backgroundColor: Colors.red,
       ),
     );
+  }
+  Future<void> _initRecorder() async {
+    await _recorder.openRecorder();
+  }
+
+  Future<void> _recordAudioAndSend() async {
+    if (_isRecording) {
+      final path = await _recorder.stopRecorder();
+      if (path != null) {
+        final file = File(path);
+        final uri = file.uri.toString();
+        print('>>>>>>>>>>>>> $uri');
+
+        //final file = File(path);
+        final fileName = path.split('/').last;
+
+        // Copia el archivo a un directorio temporal con nombre consistente
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = await File('${tempDir.path}/$fileName').create(recursive: true);
+        await tempFile.writeAsBytes(await file.readAsBytes(), flush: true);
+        final echoId = const Uuid().v4();
+        print('🎧 Archivo listo: ${tempFile.path}');
+        // [tempFile.uri.toString()];
+        // _controller?.runJavaScript("window.postMessage(JSON.stringify({ event: 'attach-file', uri: '${tempFile.uri.toString()}' }), '*')");
+        // 🔍 Intenta enviar el archivo al WebView
+        _chatwootClient!.sendMessageAudio(content: "Audio", echoId: echoId, fileAudio: tempFile);
+        /* if (Platform.isAndroid && widget.onAttachFile != null) {
+          final androidController = _controller!.platform
+          as webview_flutter_android.AndroidWebViewController;
+          androidController.setOnShowFileSelector(_androidAudioPicker);
+        }*/
+      }
+    } else {
+      await _recorder.startRecorder(toFile: 'audio.aac');
+    }
+    setState(() {
+      _isRecording = !_isRecording;
+    });
   }
 
   Widget _buildTypingIndicator() {
@@ -511,6 +557,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
   @override
   void dispose() {
     _chatwootClient?.dispose();
+    _recorder.closeRecorder();
     super.dispose();
   }
 
@@ -570,24 +617,35 @@ class _CustomChatPageState extends State<CustomChatPage> {
         children: [
           _buildConnectionStatus(),
           Expanded(
-            child: Chat(
-              messages: _messages,
-              onSendPressed: _handleSendPressed,
-              onAttachmentPressed: _handleAttachmentPressed,
-              onMessageTap: (context, message) => _handleMessageTap(message),
-              user: _user,
-              showUserAvatars: true,
-              showUserNames: true,
-
-              theme: DefaultChatTheme(
-                primaryColor: Theme.of(context).primaryColor,
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                inputBackgroundColor: Theme.of(context).cardColor,
-                inputTextColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
-                messageBorderRadius: 16,
-                userAvatarNameColors: [Theme.of(context).primaryColor],
-              ),
-              //customBottomWidget: _buildTypingIndicator(),
+            child: Stack(
+              children: [
+                Chat(
+                  messages: _messages,
+                  onSendPressed: _handleSendPressed,
+                  onAttachmentPressed: _handleAttachmentPressed,
+                  onMessageTap: (context, message) => _handleMessageTap(message),
+                  user: _user,
+                  showUserAvatars: true,
+                  showUserNames: true,
+                  theme: DefaultChatTheme(
+                    primaryColor: Theme.of(context).primaryColor,
+                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    inputBackgroundColor: Theme.of(context).cardColor,
+                    inputTextColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+                    messageBorderRadius: 16,
+                    userAvatarNameColors: [Theme.of(context).primaryColor],
+                  ),
+                 // customBottomWidget: _buildTypingIndicator(),
+                ),
+                Positioned(
+                  top: 40,
+                  right: 65,
+                  child: IconButton(
+                    onPressed: _recordAudioAndSend,
+                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

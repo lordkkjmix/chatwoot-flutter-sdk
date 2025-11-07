@@ -133,25 +133,11 @@ class _WebviewState extends State<Webview> {
 
          /* androidController
               .setOnShowFileSelector((_) => widget.onAttachFile!.call());*/
-
-          // Si quieres, habilita reproducción automática de media sin gesto
-          // (dependiendo de versión de webview_flutter)
-          try {
-            androidController.setMediaPlaybackRequiresUserGesture(false);
-            // Este método permite capturar permisos solicitados por la web (como micrófono)
-            androidController.setOnPlatformPermissionRequest((request) async {
-              await request.grant();
-            });
-          } catch (_) {}
-
         }
 
         if (Platform.isIOS) {
-          // iOS-specific configuration for better Chatwoot WebView compatibility
           final wkWebViewController =
               _controller!.platform as WebKitWebViewController;
-          wkWebViewController.setAllowsBackForwardNavigationGestures(true);
-          // Set user agent to ensure proper Chatwoot rendering
           wkWebViewController.setUserAgent(
               'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 ChatwootFlutterSDK/0.1.0');
         }
@@ -175,34 +161,14 @@ class _WebviewState extends State<Webview> {
       String filePath = result.files.single.path!;
       String fileName = result.files.single.name;
 
-      // Convert the file to base64
-      List<int> fileBytes = await File(filePath).readAsBytes();
-
-      //convert filepath into uri
       final filePath1 = (await getTemporaryDirectory()).uri.resolve(fileName);
       final file = await File.fromUri(filePath1).create(recursive: true);
-      print('>>>>>>>>>>>>> $file');
-
-      //convert file in bytes
-      await file.writeAsBytes(fileBytes, flush: true);
+      await file.writeAsBytes(await File(filePath).readAsBytes(), flush: true);
 
       return [file.uri.toString()];
     }
 
     return [];
-  }
-
-  Future<void> _recordAudioAndSend() async {
-    /*final recorder = FlutterSoundRecorder();
-    await recorder.openRecorder();
-    await recorder.startRecorder(toFile: 'audio.aac');
-
-    // Esperas unos segundos o agregas un botón para detener
-    final path = await recorder.stopRecorder();
-
-    // Subes a tu backend o Chatwoot API
-    final audioBytes = await File(path!).readAsBytes();
-    await sendAttachmentToChatwoot(audioBytes, "audio.aac", "audio/aac");*/
   }
 
 
@@ -212,14 +178,6 @@ class _WebviewState extends State<Webview> {
         ? Stack(
           children: [
             WebViewWidget(controller: _controller!),
-           /* Positioned(
-              top: 40,
-              right: 65,
-              child: IconButton(
-                onPressed: _recordAudioAndSend,
-                icon: const Icon(Icons.mic),
-              ),
-            ),*/
           ],
         )
         : SizedBox();

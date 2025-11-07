@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
 import 'package:chatwoot_flutter_sdk/data/chatwoot_repository.dart';
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_contact.dart';
@@ -58,6 +60,18 @@ class ChatwootClient {
       {required String content, required String echoId}) async {
     final request = ChatwootNewMessageRequest(content: content, echoId: echoId);
     await _repository.sendMessage(request);
+  }
+
+  Future<void> sendMessageAudio(
+      {required String content, required String echoId, required File fileAudio}) async {
+    final request = ChatwootNewMessageRequest(content: content, echoId: echoId);
+    await _repository.sendMessageAudio(request, fileAudio);
+  }
+
+  Future<void> sendMessageMedia(
+      {required String content, required String echoId, required File media}) async {
+    final request = ChatwootNewMessageRequest(content: content, echoId: echoId);
+    await _repository.sendMessageMedia(request, media);
   }
 
   ///Send chatwoot action performed by user.

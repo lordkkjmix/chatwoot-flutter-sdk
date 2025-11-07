@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:core';
+import 'dart:developer';
+import 'dart:io';
 
 import 'package:chatwoot_flutter_sdk/chatwoot_callbacks.dart';
 import 'package:chatwoot_flutter_sdk/chatwoot_client.dart';
@@ -38,6 +40,11 @@ abstract class ChatwootRepository {
   void listenForEvents();
 
   Future<void> sendMessage(ChatwootNewMessageRequest request);
+
+  Future<void> sendMessageAudio(
+      ChatwootNewMessageRequest request, File fileAudio);
+
+  Future<void> sendMessageMedia(ChatwootNewMessageRequest request, File media);
 
   void sendAction(ChatwootActionType action);
 
@@ -126,6 +133,38 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
   }
 
+  Future<void> sendMessageAudio(
+      ChatwootNewMessageRequest request, File audioFile) async {
+    try {
+      final createdMessage =
+          await clientService.sendMessageAudio(request, audioFile);
+      await localStorage.messagesDao.saveMessage(createdMessage);
+      callbacks.onMessageSent?.call(createdMessage, request.echoId);
+      if (clientService.connection != null && !_isListeningForEvents) {
+        listenForEvents();
+      }
+    } on ChatwootClientException catch (e) {
+      callbacks.onError?.call(
+          ChatwootClientException(e.cause, e.type, data: request.echoId));
+    }
+  }
+
+  Future<void> sendMessageMedia(
+      ChatwootNewMessageRequest request, File media) async {
+    try {
+      final createdMessage =
+          await clientService.sendMessageMedia(request, media);
+      await localStorage.messagesDao.saveMessage(createdMessage);
+      callbacks.onMessageSent?.call(createdMessage, request.echoId);
+      if (clientService.connection != null && !_isListeningForEvents) {
+        listenForEvents();
+      }
+    } on ChatwootClientException catch (e) {
+      callbacks.onError?.call(
+          ChatwootClientException(e.cause, e.type, data: request.echoId));
+    }
+  }
+
   /// Connects to chatwoot websocket and starts listening for updates
   ///
   /// Received events/messages are pushed through [ChatwootClient.callbacks]
@@ -152,7 +191,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
         callbacks.onConfirmedSubscription?.call();
       } else if (chatwootEvent.message?.event ==
           ChatwootEventMessageType.message_created) {
-        debugPrint("here comes message: $event");
+        log("here comes message: $event");
         final message = chatwootEvent.message!.data!.getMessage();
         localStorage.messagesDao.saveMessage(message);
         if (message.isMine) {
