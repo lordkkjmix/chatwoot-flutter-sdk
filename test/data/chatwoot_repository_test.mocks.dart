@@ -4,6 +4,7 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i11;
+import 'dart:io' as _i15;
 
 import 'package:async/async.dart' as _i18;
 import 'package:chatwoot_flutter_sdk/chatwoot_callbacks.dart' as _i16;
@@ -314,6 +315,58 @@ class MockChatwootClientService extends _i1.Mock
       ) as _i11.Future<_i7.ChatwootMessage>);
 
   @override
+  _i11.Future<_i7.ChatwootMessage> sendMessageAudio(
+    _i14.ChatwootNewMessageRequest? request,
+    _i15.File? audioFile,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #sendMessageAudio,
+          [
+            request,
+            audioFile,
+          ],
+        ),
+        returnValue:
+            _i11.Future<_i7.ChatwootMessage>.value(_FakeChatwootMessage_5(
+          this,
+          Invocation.method(
+            #sendMessageAudio,
+            [
+              request,
+              audioFile,
+            ],
+          ),
+        )),
+      ) as _i11.Future<_i7.ChatwootMessage>);
+
+  @override
+  _i11.Future<_i7.ChatwootMessage> sendMessageMedia(
+    _i14.ChatwootNewMessageRequest? request,
+    _i15.File? media,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #sendMessageMedia,
+          [
+            request,
+            media,
+          ],
+        ),
+        returnValue:
+            _i11.Future<_i7.ChatwootMessage>.value(_FakeChatwootMessage_5(
+          this,
+          Invocation.method(
+            #sendMessageMedia,
+            [
+              request,
+              media,
+            ],
+          ),
+        )),
+      ) as _i11.Future<_i7.ChatwootMessage>);
+
+  @override
   _i11.Future<_i7.ChatwootMessage> updateMessage(
     String? messageIdentifier,
     dynamic update,
@@ -367,7 +420,7 @@ class MockChatwootClientService extends _i1.Mock
   @override
   void sendAction(
     String? contactPubsubToken,
-    _i15.ChatwootActionType? action,
+    _i16.ChatwootActionType? action,
   ) =>
       super.noSuchMethod(
         Invocation.method(
@@ -384,7 +437,7 @@ class MockChatwootClientService extends _i1.Mock
 /// A class which mocks [ChatwootCallbacks].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockChatwootCallbacks extends _i1.Mock implements _i16.ChatwootCallbacks {
+class MockChatwootCallbacks extends _i1.Mock implements _i17.ChatwootCallbacks {
   MockChatwootCallbacks() {
     _i1.throwOnMissingStub(this);
   }
@@ -542,7 +595,7 @@ class MockChatwootCallbacks extends _i1.Mock implements _i16.ChatwootCallbacks {
       );
 
   @override
-  set onError(void Function(_i17.ChatwootClientException)? _onError) =>
+  set onError(void Function(_i18.ChatwootClientException)? _onError) =>
       super.noSuchMethod(
         Invocation.setter(
           #onError,
@@ -626,7 +679,7 @@ class MockWebSocketChannel extends _i1.Mock implements _i8.WebSocketChannel {
 
   @override
   _i9.StreamChannel<dynamic> transformSink(
-          _i18.StreamSinkTransformer<dynamic, dynamic>? transformer) =>
+          _i19.StreamSinkTransformer<dynamic, dynamic>? transformer) =>
       (super.noSuchMethod(
         Invocation.method(
           #transformSink,

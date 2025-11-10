@@ -4,6 +4,7 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i6;
+import 'dart:io' as _i9;
 
 import 'package:chatwoot_flutter_sdk/chatwoot_callbacks.dart' as _i4;
 import 'package:chatwoot_flutter_sdk/data/chatwoot_repository.dart' as _i5;
@@ -157,7 +158,41 @@ class MockChatwootRepository extends _i1.Mock
       ) as _i6.Future<void>);
 
   @override
-  void sendAction(_i9.ChatwootActionType? action) => super.noSuchMethod(
+  _i6.Future<void> sendMessageAudio(
+    _i8.ChatwootNewMessageRequest? request,
+    _i9.File? fileAudio,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #sendMessageAudio,
+          [
+            request,
+            fileAudio,
+          ],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> sendMessageMedia(
+    _i8.ChatwootNewMessageRequest? request,
+    _i9.File? media,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #sendMessageMedia,
+          [
+            request,
+            media,
+          ],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  void sendAction(_i10.ChatwootActionType? action) => super.noSuchMethod(
         Invocation.method(
           #sendAction,
           [action],

@@ -74,15 +74,19 @@ class ChatwootClientServiceImpl extends ChatwootClientService {
       ChatwootNewMessageRequest request, File audioFile) async {
     try {
       // Prepara el FormData (multipart)
-      final formData = FormData.fromMap({
-        'content': '🎤 Audio',
-        'message_type': 'incoming',
-        'attachments[]': await MultipartFile.fromFile(
-          audioFile.path,
-          filename: audioFile.path.split('/').last,
-          contentType: DioMediaType.parse('audio/aac'),
-        ),
-      });
+      final Map<String, dynamic> formMap = request.toJson();
+      // Añadimos los campos obligatorios si no están en el request
+      formMap['content'] ??= '🎤 Audio';
+      formMap['message_type'] ??= 'incoming';
+
+      // Añadimos el archivo adjunto
+      formMap['attachments[]'] = await MultipartFile.fromFile(
+        audioFile.path,
+        filename: audioFile.path.split('/').last,
+        contentType: DioMediaType.parse('audio/aac'),
+      );
+
+      final formData = FormData.fromMap(formMap);
 
       // Construye la URL pública de Chatwoot (usando placeholders dinámicos)
       final url =
@@ -167,23 +171,31 @@ class ChatwootClientServiceImpl extends ChatwootClientService {
           break;
       }
 
-      // Obtener el mapa del request y valores seguros
       final Map<String, dynamic> reqMap = request.toJson();
+
+      // Obtener el tipo de mensaje
       final messageType = (reqMap['message_type'] as String?) ??
           (reqMap['messageType'] as String?) ??
           'incoming';
-      // Preparar datos para envío
-      final formData = FormData.fromMap({
-        'content': request.content.isNotEmpty == true
-            ? request.content
-            : emojiLabel,
-        'message_type': messageType,
-        'attachments[]': await MultipartFile.fromFile(
-          file.path,
-          filename: fileName,
-          contentType: DioMediaType.parse(mimeType),
-        ),
-      });
+
+      // Construir el FormData con los datos del request
+      final formMap = Map<String, dynamic>.from(reqMap);
+
+      // Reforzamos valores clave que Chatwoot necesita
+      formMap['content'] = (request.content.isNotEmpty == true)
+          ? request.content
+          : emojiLabel;
+      formMap['message_type'] = messageType;
+
+      // Adjuntar el archivo
+      formMap['attachments[]'] = await MultipartFile.fromFile(
+        file.path,
+        filename: fileName,
+        contentType: DioMediaType.parse(mimeType),
+      );
+
+      // Crear FormData
+      final formData = FormData.fromMap(formMap);
       print('>>>>>>>>>>>   formData >>> ${formData}');
       // Construcción de URL (usa placeholders del interceptor)
       final url =

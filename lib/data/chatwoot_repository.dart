@@ -189,15 +189,16 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
         }
         _publishPresenceUpdates();
         callbacks.onConfirmedSubscription?.call();
-      } else if (chatwootEvent.message?.event ==
-          ChatwootEventMessageType.message_created) {
+      } else if (chatwootEvent.message?.event == ChatwootEventMessageType.message_created) {
         log("here comes message: $event");
         final message = chatwootEvent.message!.data!.getMessage();
         localStorage.messagesDao.saveMessage(message);
-        if (message.isMine) {
-          callbacks.onMessageDelivered
-              ?.call(message, chatwootEvent.message!.data!.echoId!);
+        final echoId = chatwootEvent.message!.data?.echoId ?? "-1";
+        if (message.isMine && echoId != "-1") {
+          callbacks.onMessageDelivered?.call(message, chatwootEvent.message!.data!.echoId!);
         } else {
+          log('>>>>>>>>>>>> chatwootEvent Agent ${chatwootEvent.message!.data?.toJson()}');
+          log('>>>>>>>>>>>> chatwootEvent Agent attachments ${message.attachments}');
           callbacks.onMessageReceived?.call(message);
         }
       } else if (chatwootEvent.message?.event ==
