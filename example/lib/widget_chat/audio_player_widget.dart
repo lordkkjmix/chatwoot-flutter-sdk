@@ -1,5 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class AudioPlayerWidget extends StatefulWidget {
   final String uri;
@@ -13,8 +14,10 @@ class AudioPlayerWidget extends StatefulWidget {
 class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   late AudioPlayer _player;
   bool _isPlaying = false;
+  bool _isLoading = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  String? _cachedPath;
 
   @override
   void initState() {
@@ -40,6 +43,12 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
     });
   }
 
+  Future<void> _prepareAudio() async {
+    setState(() => _isLoading = true);
+    _cachedPath = await _getCachedAudio(widget.uri);
+    setState(() => _isLoading = false);
+  }
+
   @override
   void dispose() {
     _player.dispose();
@@ -50,9 +59,18 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
     if (_isPlaying) {
       await _player.pause();
     } else {
-      await _player.play(UrlSource(widget.uri));
+      //await _player.play(UrlSource(widget.uri));
+      // Usa el archivo cacheado (ya descargado)
+      _cachedPath ??= await _getCachedAudio(widget.uri);
+
+      await _player.play(DeviceFileSource(_cachedPath!));
     }
     setState(() => _isPlaying = !_isPlaying);
+  }
+
+  Future<String> _getCachedAudio(String url) async {
+    var file = await DefaultCacheManager().getSingleFile(url);
+    return file.path;
   }
 
   @override

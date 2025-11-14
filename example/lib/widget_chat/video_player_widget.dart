@@ -17,13 +17,18 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   void initState() {
     super.initState();
-
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.uri))
       ..initialize().then((_) {
-        if (!mounted) return; // 👈 evita setState después del dispose
+        if (!mounted) return;
         setState(() {
           _isInitialized = true;
         });
+      })
+      ..addListener(() {
+        final isFinished = _controller.value.position >= _controller.value.duration;
+        if (isFinished && mounted) {
+          setState(() {});
+        }
       });
   }
 
@@ -33,6 +38,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     super.dispose();
   }
 
+  bool get _isFinished =>
+      _controller.value.position >= _controller.value.duration;
+
   @override
   Widget build(BuildContext context) {
     if (!_isInitialized) {
@@ -40,19 +48,32 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Video',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         Stack(
+          alignment: Alignment.center,
           children: [
             AspectRatio(
               aspectRatio: _controller.value.aspectRatio,
               child: VideoPlayer(_controller),
             ),
             IconButton(
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.red.withValues(alpha: 0.2),
+                shape: const CircleBorder(),
+                padding: const EdgeInsets.all(12),
+              ),
               onPressed: () {
+                if (_isFinished) {
+                  _controller.seekTo(Duration.zero);
+                  _controller.play();
+                  return;
+                }
+
                 setState(() {
                   _controller.value.isPlaying
                       ? _controller.pause()
@@ -60,8 +81,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                 });
               },
               icon: Icon(
-                _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.red,
+                _isFinished
+                    ? Icons.replay
+                    : _controller.value.isPlaying
+                        ? Icons.pause
+                        : Icons.play_arrow,
+                color: Colors.white,
+                size: 32,
               ),
             ),
           ],
