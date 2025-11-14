@@ -51,6 +51,7 @@ dependencies:
   flutter_sound: ^9.28.0
   audioplayers: ^6.5.1
   video_player: ^2.10.0
+  cached_video_player_plus: ^4.0.4
   flutter_cache_manager: ^3.4.1
 
 dev_dependencies:

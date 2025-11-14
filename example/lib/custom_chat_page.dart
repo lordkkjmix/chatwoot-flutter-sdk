@@ -143,7 +143,10 @@ class _CustomChatPageState extends State<CustomChatPage> {
             _showErrorSnackBar('Error: ${error.toString()}');
           },
           onConversationResolved: () {
+            print('>>>>>>>>>>>>>> onConversationResolved');
+            //_chatwootClient?.clearClientData();
 
+            //ChatwootClient.clearAllData();
           },
         ),
       );
@@ -182,14 +185,9 @@ class _CustomChatPageState extends State<CustomChatPage> {
 
   types.Message _convertChatwootMessageToType(ChatwootMessage chatwootMessage, types.User author) {
     // Handle different message types
-    print('>>>>>>>>>>>>>>>>> chatwootMessage.attachments ${chatwootMessage
-        .attachments}');
     if (chatwootMessage.attachments?.isNotEmpty == true) {
       final attachment = chatwootMessage.attachments!.first;
-      print('>>>>>>>>>>>> attachment message $attachment');
-      //print('>>>>>>>>>>>> ${attachment.file_type}');
       if (attachment is Map<String, dynamic>) {
-        print('>>>>>>>>>>>> file_type ${attachment['file_type']}');
 
         final fileType = attachment['file_type']?.toString();
         final dataUrl = attachment['data_url']?.toString();
