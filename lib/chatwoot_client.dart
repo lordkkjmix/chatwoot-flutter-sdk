@@ -74,6 +74,15 @@ class ChatwootClient {
     await _repository.sendMessageMedia(request, media);
   }
 
+  fullDisconnect({bool clearLocalStorage = false}) {
+    _repository.fullDisconnect(clearLocalStorage: clearLocalStorage);
+  }
+
+
+  listenForEvents({bool clearLocalStorage = false}) {
+    _repository.listenForEvents();
+  }
+
   ///Send chatwoot action performed by user.
   ///
   /// Example: User started typing
