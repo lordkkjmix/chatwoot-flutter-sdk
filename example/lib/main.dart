@@ -38,9 +38,9 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
   final List<String> _messages = [];
 
   // Demo configuration - Replace with your actual Chatwoot instance details
-  final String _baseUrl = 'https://chatwoot.clipp.app';
-  final String _inboxIdentifier = 'QW7mgWQG7a5Tz2sfJUYVrLP3';
-  final String _websiteToken = 'LDKg51ije4poZ7Yi46k1iK8P';
+  final String _baseUrl = 'https://app.chatwoot.app';
+  final String _inboxIdentifier = 'QW7mgWQG7a5Tz2sfJHTEVrLP3';
+  final String _websiteToken = 'FJuAD272ZhPMDPmc4ciorqx7d4F';
 
   @override
   void initState() {

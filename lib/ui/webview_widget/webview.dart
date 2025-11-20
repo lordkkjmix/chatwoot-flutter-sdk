@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
 
 import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
@@ -74,13 +73,12 @@ class _WebviewState extends State<Webview> {
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
+    //_requestPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       String webviewUrl = widget.widgetUrl;
       final cwCookie = await StoreHelper.getCookie();
       if (cwCookie.isNotEmpty) {
         webviewUrl = "${webviewUrl}&cw_conversation=${cwCookie}";
-        log("Chatwoot webviewUrl: ${webviewUrl}");
       }
       setState(() {
         _controller = WebViewController()
@@ -107,7 +105,7 @@ class _WebviewState extends State<Webview> {
           )
           ..addJavaScriptChannel("ReactNativeWebView",
               onMessageReceived: (JavaScriptMessage jsMessage) {
-            log("Chatwoot message received: ${jsMessage.message}");
+            debugPrint("Chatwoot message received: ${jsMessage.message}");
             final message = getMessage(jsMessage.message);
             if (isJsonString(message)) {
               final parsedMessage = jsonDecode(message);
@@ -129,15 +127,18 @@ class _WebviewState extends State<Webview> {
         if (Platform.isAndroid && widget.onAttachFile != null) {
           final androidController = _controller!.platform
               as webview_flutter_android.AndroidWebViewController;
-          androidController.setOnShowFileSelector(_androidFilePicker);
+          //androidController.setOnShowFileSelector(_androidFilePicker);
 
-         /* androidController
-              .setOnShowFileSelector((_) => widget.onAttachFile!.call());*/
+          androidController
+              .setOnShowFileSelector((_) => widget.onAttachFile!.call());
         }
 
         if (Platform.isIOS) {
+          // iOS-specific configuration for better Chatwoot WebView compatibility
           final wkWebViewController =
               _controller!.platform as WebKitWebViewController;
+
+          // Set user agent to ensure proper Chatwoot rendering
           wkWebViewController.setUserAgent(
               'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 ChatwootFlutterSDK/0.1.0');
         }
@@ -145,7 +146,7 @@ class _WebviewState extends State<Webview> {
     });
   }
 
-  // helper para pedir permisos
+  // helper to request permissions
   Future<void> _requestPermissions() async {
     await Permission.microphone.request();
     await Permission.camera.request();
@@ -175,11 +176,7 @@ class _WebviewState extends State<Webview> {
   @override
   Widget build(BuildContext context) {
     return _controller != null
-        ? Stack(
-          children: [
-            WebViewWidget(controller: _controller!),
-          ],
-        )
+        ? WebViewWidget(controller: _controller!)
         : SizedBox();
   }
 }

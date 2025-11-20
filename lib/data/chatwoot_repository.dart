@@ -30,28 +30,36 @@ abstract class ChatwootRepository {
 
   ChatwootRepository(this.clientService, this.localStorage, this.callbacks);
 
+  /// Initializes the repository, fetches contact and conversation details.
   Future<void> initialize(ChatwootUser? user);
 
+  /// Retrieves persisted messages from local storage.
   void getPersistedMessages();
 
+  /// Fetches all messages for the conversation from the server.
   Future<void> getMessages();
 
+  /// Listens for incoming websocket events from Chatwoot.
   void listenForEvents();
 
+  /// Sends a message to the conversation.
   Future<void> sendMessage(ChatwootNewMessageRequest request);
 
+  /// Sends an audio file to the conversation.
   Future<void> sendMessageAudio(
       ChatwootNewMessageRequest request, File fileAudio);
 
+  /// Sends a media file to the conversation.
   Future<void> sendMessageMedia(ChatwootNewMessageRequest request, File media);
 
+  /// Sends a user action (eg. typing) to the conversation.
   void sendAction(ChatwootActionType action);
 
+  /// Clears all data related to the current Chatwoot instance.
   Future<void> clear();
 
+  /// Disposes the repository and closes all streams and connections.
   void dispose();
-
-  void fullDisconnect({bool clearLocalStorage = false});
 }
 
 class ChatwootRepositoryImpl extends ChatwootRepository {
@@ -59,7 +67,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
   bool _isListeningForEvents = false;
   bool _isConnected = false;
 
-  // Timers y suscripciones
+  // Timers and subscriptions
   Timer? _publishPresenceTimer;
   Timer? _presenceResetTimer;
   StreamSubscription? _socketSubscription;
@@ -70,7 +78,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
       required ChatwootCallbacks streamCallbacks})
       : super(clientService, localStorage, streamCallbacks);
 
-  /// Fetches persisted messages.
+  /// Fetches all messages for the conversation from the server.
   ///
   /// Calls [ChatwootCallbacks.onMessagesRetrieved] when [ChatwootClientService.getAllMessages] is successful
   /// Calls [ChatwootCallbacks.onError] when [ChatwootClientService.getAllMessages] fails
@@ -85,7 +93,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
   }
 
-  /// Fetches persisted messages.
+  /// Fetches persisted messages from local storage.
   ///
   /// Calls [ChatwootCallbacks.onPersistedMessagesRetrieved] if persisted messages are found
   @override
@@ -96,7 +104,9 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
   }
 
-  /// Initializes chatwoot client repository
+  /// Initializes chatwoot client repository, fetches/updates contact and conversation.
+  /// After initialization, starts listening for websocket events.
+  @override
   Future<void> initialize(ChatwootUser? user) async {
     try {
       if (user != null) {
@@ -124,7 +134,11 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     listenForEvents();
   }
 
-  ///Sends message to chatwoot inbox
+  ///Sends message to chatwoot inbox.
+  ///
+  /// On success, [ChatwootCallbacks.onMessageSent] is called.
+  /// On failure, [ChatwootCallbacks.onError] is called.
+  @override
   Future<void> sendMessage(ChatwootNewMessageRequest request) async {
     try {
       final createdMessage = await clientService.createMessage(request);
@@ -139,6 +153,11 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
   }
 
+  /// Sends an audio file to the chatwoot inbox.
+  ///
+  /// On success, [ChatwootCallbacks.onMessageSent] is called.
+  /// On failure, [ChatwootCallbacks.onError] is called.
+  @override
   Future<void> sendMessageAudio(
       ChatwootNewMessageRequest request, File audioFile) async {
     try {
@@ -155,6 +174,11 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
   }
 
+  /// Sends a media file to the chatwoot inbox.
+  ///
+  /// On success, [ChatwootCallbacks.onMessageSent] is called.
+  /// On failure, [ChatwootCallbacks.onError] is called.
+  @override
   Future<void> sendMessageMedia(
       ChatwootNewMessageRequest request, File media) async {
     try {
@@ -171,12 +195,12 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
   }
 
-  /// Connects to chatwoot websocket and starts listening for updates
+  /// Connects to chatwoot websocket and starts listening for updates.
   ///
-  /// Received events/messages are pushed through [ChatwootClient.callbacks]
+  /// Received events/messages are pushed through [ChatwootClient.callbacks].
   @override
   void listenForEvents() {
-    // Evita múltiples conexiones
+    // Avoid multiple connections
     if (_isConnected) return;
 
     final token = localStorage.contactDao.getContact()?.pubsubToken;
@@ -184,7 +208,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
       return;
     }
 
-    // Abre la conexión (clientService debe exponer startWebSocketConnection)
+    // Open the connection
     try {
       clientService.startWebSocketConnection(
           localStorage.contactDao.getContact()!.pubsubToken ?? "");
@@ -194,7 +218,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
       return;
     }
 
-    // Subscribe a stream del client
+    // Subscribe to the client's stream
     final stream = clientService.connection?.stream;
     if (stream == null) {
       _isConnected = false;
@@ -251,7 +275,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
           // localStorage.conversationDao.deleteConversation();
           localStorage.messagesDao.clearAll();
           callbacks.onConversationResolved?.call();
-          // Opcional: realizar limpieza automática
+          // Optional: perform automatic cleanup
            fullDisconnect();
         } else if (chatwootEvent.message?.event ==
             ChatwootEventMessageType.presence_update) {
@@ -270,13 +294,13 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
           debugPrint("chatwoot unknown event: $event");
         }
       }catch (err, st) {
-        // Atrapamos errores para no romper el stream
-        debugPrint("Error procesando evento: $err\n$st");
+        // We catch errors so as not to break the stream
+        debugPrint("Error processing event: $err\n$st");
       }
     }, onError: (err) {
       debugPrint("Websocket error: $err");
       callbacks.onError?.call(ChatwootClientException(err.toString(), err));
-      // marcar desconectado y limpiar
+      // mark as disconnected and clean up
       _isConnected = false;
     }, onDone: () {
       debugPrint("Websocket connection closed (onDone).");
@@ -296,18 +320,12 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
   /// Cancels websocket stream subscriptions and disposes [localStorage]
   @override
   void dispose() {
-    // Limpieza final
+    // Final cleanup
     fullDisconnect();
-    //localStorage.dispose();
     callbacks = ChatwootCallbacks();
     try {
       localStorage.dispose();
     } catch (_) {}
-    /*_presenceResetTimer?.cancel();
-    _publishPresenceTimer?.cancel();
-    _subscriptions.forEach((subs) {
-      subs.cancel();
-    });*/
   }
 
   ///Send actions like user started typing
@@ -341,11 +359,11 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
   }
 
   // -------------------------
-  //  Limpieza total y desconexión
+  //  Full cleanup and disconnection
   // -------------------------
 
-  /// Cancela timers, streams, y cierra websocket.
-  /// Llamar cuando sales de la vista, entras al background o resuelves conversación.
+  /// Cancels timers, streams, and closes the websocket.
+  /// Call when leaving the view, entering the background, or resolving a conversation.
   void fullDisconnect({bool clearLocalStorage = false}) {
     // Cancel timers
     _publishPresenceTimer?.cancel();
@@ -354,7 +372,7 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     _presenceResetTimer?.cancel();
     _presenceResetTimer = null;
 
-    // Cancelar todas las suscripciones
+    // Cancel all subscriptions
     for (final s in _subscriptions) {
       try {
         s.cancel();
@@ -362,18 +380,13 @@ class ChatwootRepositoryImpl extends ChatwootRepository {
     }
     _subscriptions.clear();
 
-    // Socket específico
+    // Specific socket
     _socketSubscription?.cancel();
     _socketSubscription = null;
 
     // Flags
     _isConnected = false;
     _isListeningForEvents = false;
-
-    // Cerrar conexión en el clientService (implementa este método)
-    try {
-      //clientService.connection?.();
-    } catch (_) {}
 
     if (clearLocalStorage) {
       localStorage.clear();

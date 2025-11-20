@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chatwoot_example/utils.dart';
+import 'package:chatwoot_example/permision/utils.dart';
 import 'package:chatwoot_example/widget_chat/audio_player_widget.dart';
 import 'package:chatwoot_example/widget_chat/video_player_widget.dart';
 import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
@@ -118,22 +118,18 @@ class _CustomChatPageState extends State<CustomChatPage> {
             });
           },
           onMessageReceived: (message) {
-            print('>>>>>>>>>>>> onMessageReceived');
             _addMessage(_convertChatwootMessageToType(message, _agent));
           },
           onMessageSent: (message, echoId) {
             // Message already added when sending
           },
           onMessageDelivered: (message, echoId) {
-            print('>>>>>>>>>>>> onMessageDelivered');
             _updateMessageStatus(echoId, types.Status.delivered);
           },
           onPersistedMessagesRetrieved: (messages) {
-            print('>>>>>>>>>>>>>> onPersistedMessagesRetrieved');
             _loadPersistedMessages(messages);
           },
           onMessagesRetrieved: (messages) {
-            print('>>>>>>>>>>>>>> onMessagesRetrieved');
             _loadRemoteMessages(messages);
           },
           onError: (error) {
@@ -143,10 +139,6 @@ class _CustomChatPageState extends State<CustomChatPage> {
             _showErrorSnackBar('Error: ${error.toString()}');
           },
           onConversationResolved: () {
-            print('>>>>>>>>>>>>>> onConversationResolved');
-            //_chatwootClient?.clearClientData();
-
-            //ChatwootClient.clearAllData();
           },
         ),
       );
@@ -191,8 +183,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
 
         final fileType = attachment['file_type']?.toString();
         final dataUrl = attachment['data_url']?.toString();
-        if (fileType != null && fileType == 'image') { //!.startsWith('image/')
-          print('>>>>>>>>>>>> Ingreso imagen $dataUrl ');
+        if (fileType != null && fileType == 'image') {
           return types.ImageMessage(
             author: author,
             createdAt: DateTime
@@ -202,12 +193,11 @@ class _CustomChatPageState extends State<CustomChatPage> {
             name: dataUrl
                 ?.split('/')
                 .last ?? 'image',
-            size: fileType?.length.toDouble() ?? 0,
+            size: fileType.length.toDouble(),
             uri: dataUrl ?? '',
           );
         } else {
           if (fileType != null && fileType == 'audio') {
-            print('>>>>>>>>>>>> Ingreso audios $dataUrl ');
             return types.AudioMessage(
               author: author,
               createdAt: DateTime
@@ -217,13 +207,12 @@ class _CustomChatPageState extends State<CustomChatPage> {
               name: dataUrl
                   ?.split('/')
                   .last ?? 'audio',
-              size: fileType?.length.toDouble() ?? 0,
+              size: fileType.length.toDouble(),
               uri: dataUrl ?? '',
               duration: Duration(seconds: 10),
             );
           } else {
             if (fileType != null && fileType == 'video') {
-              print('>>>>>>>>>>>> Ingreso video $dataUrl');
               return types.VideoMessage(
                 author: author,
                 createdAt: DateTime
@@ -233,7 +222,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
                 name: dataUrl
                     ?.split('/')
                     .last ?? 'video',
-                size: fileType?.length.toDouble() ?? 0,
+                size: fileType.length.toDouble(),
                 uri: dataUrl ?? '',
               );
             } else {
@@ -323,7 +312,6 @@ class _CustomChatPageState extends State<CustomChatPage> {
 
         // Detectar tipo MIME
         final mimeType = lookupMimeType(filePath) ?? '';
-        print('Tipo MIME detectado: $mimeType');
 
         // Determinar tipo de archivo según MIME
         String fileType;
@@ -337,8 +325,6 @@ class _CustomChatPageState extends State<CustomChatPage> {
           fileType = 'file';
         }
 
-        print('Tipo clasificado: $fileType');
-
         // Convert the file to base64
         List<int> fileBytes = await File(filePath).readAsBytes();
 
@@ -347,8 +333,6 @@ class _CustomChatPageState extends State<CustomChatPage> {
         final file = await File.fromUri(tempUri).create(recursive: true);
         //convert file in bytes
         final resultPath = await file.writeAsBytes(fileBytes, flush: true);
-
-        print('>>>>>>>>>>>>> $file');
 
         final echoId = const Uuid().v4();
 
