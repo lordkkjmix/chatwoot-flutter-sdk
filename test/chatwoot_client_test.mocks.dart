@@ -219,4 +219,14 @@ class MockChatwootRepository extends _i1.Mock
         ),
         returnValueForMissingStub: null,
       );
+
+  @override
+  void fullDisconnect({bool? clearLocalStorage = false}) => super.noSuchMethod(
+        Invocation.method(
+          #fullDisconnect,
+          [],
+          {#clearLocalStorage: clearLocalStorage},
+        ),
+        returnValueForMissingStub: null,
+      );
 }
