@@ -310,10 +310,10 @@ class _CustomChatPageState extends State<CustomChatPage> {
         String fileName = result.files.single.name;
         final fileTemp = result.files.first;
 
-        // Detectar tipo MIME
+        // Detect MIME type
         final mimeType = lookupMimeType(filePath) ?? '';
 
-        // Determinar tipo de archivo según MIME
+        // Determine file type based on MIME
         String fileType;
         if (mimeType.startsWith('image/')) {
           fileType = 'image';
@@ -336,11 +336,10 @@ class _CustomChatPageState extends State<CustomChatPage> {
 
         final echoId = const Uuid().v4();
 
-        // Aquí puedes actuar según el tipo
+        // Here you can act according to the type
         switch (fileType) {
           case 'image':
-          // Mostrar vista previa o enviarlo como imagen
-          //final file = result.files.first;
+          // Show preview or send as image
             final fileMessage = types.ImageMessage(
               author: _user,
               createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -355,8 +354,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
 
             break;
           case 'audio':
-          // Enviar al API o mostrar reproductor
-          //final file = result.files.first;
+          // Send to API or show player
             final fileMessage = types.AudioMessage(
               author: _user,
               createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -372,8 +370,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
                 content: "", echoId: echoId, fileAudio: resultPath);
             break;
           case 'video':
-          // Enviar al API o mostrar reproductor
-          //final file = result.files.first;
+          // Send to API or show player
             final fileMessage = types.VideoMessage(
               author: _user,
               createdAt: DateTime
@@ -389,7 +386,6 @@ class _CustomChatPageState extends State<CustomChatPage> {
                 content: "", echoId: echoId, media: resultPath);
             break;
           default:
-          //final file = result.files.first;
             final fileMessage = types.FileMessage(
               author: _user,
               createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -441,13 +437,11 @@ class _CustomChatPageState extends State<CustomChatPage> {
       if (path != null) {
         final file = File(path);
         final fileName = path.split('/').last;
-        //final fileTemp = file.first;
-        // Copia el archivo a un directorio temporal con nombre consistente
+        // Copy the file to a temporary directory with a consistent name
         final tempDir = await getTemporaryDirectory();
         final tempFile = await File('${tempDir.path}/$fileName').create(recursive: true);
         await tempFile.writeAsBytes(await file.readAsBytes(), flush: true);
         final echoId = const Uuid().v4();
-        print('🎧 Archivo listo: ${tempFile.path}');
         final int sizeInBytes = await file.length();
         final fileMessage = types.AudioMessage(
             author: _user,
@@ -643,14 +637,14 @@ class _CustomChatPageState extends State<CustomChatPage> {
       ),
       child: Row(
         children: [
-          // 📎 Botón de adjuntar archivos (solo visible si no está grabando)
+          // Attach files button (only visible when not recording)
           if (!_isRecording)
             IconButton(
               icon: const Icon(Icons.attach_file),
               onPressed: _handleAttachmentPressed,
             ),
 
-          // 💬 / 🔊 Campo dinámico
+          // Dynamic field
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
@@ -663,7 +657,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
                 controller: _controller,
                 onChanged: (value) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: 'Escribe un mensaje...',
+                  hintText: 'Type a message...',
                   filled: true,
                   fillColor: Theme
                       .of(context)
@@ -689,7 +683,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
             ),
           ),
 
-          // 🎤 / 📩 Botón dinámico
+          // Dynamic button
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             transitionBuilder: (child, animation) =>
@@ -762,7 +756,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
                           width: 4,
                           height: _isRecording
                               ? (10 + (i * 5)).toDouble()
-                              : 10, // alturas variables
+                              : 10, // variable heights
                           decoration: BoxDecoration(
                             color: Colors.redAccent,
                             borderRadius: BorderRadius.circular(2),
@@ -775,7 +769,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
           ),
           const SizedBox(width: 8),
           const Text(
-            'Grabando...',
+            'Recording...',
             style: TextStyle(
               color: Colors.redAccent,
               fontWeight: FontWeight.w500,
