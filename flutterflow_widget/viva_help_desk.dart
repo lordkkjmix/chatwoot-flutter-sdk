@@ -241,32 +241,13 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         url = "$url&cw_conversation=$cookie";
       }
 
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(widget.isDark == true ? Colors.black : Colors.white)
-        ..setNavigationDelegate(NavigationDelegate(
-          onPageStarted: (_) {
-            if (mounted) setState(() => _isLoading = true);
-          },
-          onPageFinished: (_) {
-            if (mounted) setState(() => _isLoading = false);
-            // Inject scripts on web after page load
-            if (kIsWeb && _injectedJavaScript.isNotEmpty) {
-              _controller?.runJavaScript(_injectedJavaScript);
-            }
-          },
-          onWebResourceError: (error) {
-            if (mounted) {
-              setState(() {
-                _errorMessage = 'Error: ${error.description}';
-                _isLoading = false;
-              });
-            }
-          },
-        ));
+      final controller = WebViewController();
 
-      // JS channel only for mobile
+      // These methods are NOT supported on web - only call on mobile
       if (!kIsWeb) {
+        controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+        controller.setBackgroundColor(
+            widget.isDark == true ? Colors.black : Colors.white);
         controller.addJavaScriptChannel(
           "ReactNativeWebView",
           onMessageReceived: (msg) {
@@ -282,6 +263,27 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
           },
         );
       }
+
+      controller.setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (_) {
+          if (mounted) setState(() => _isLoading = true);
+        },
+        onPageFinished: (_) {
+          if (mounted) setState(() => _isLoading = false);
+          // Inject scripts on web after page load
+          if (kIsWeb && _injectedJavaScript.isNotEmpty) {
+            _controller?.runJavaScript(_injectedJavaScript);
+          }
+        },
+        onWebResourceError: (error) {
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Error: ${error.description}';
+              _isLoading = false;
+            });
+          }
+        },
+      ));
 
       controller.loadRequest(Uri.parse(url));
 
