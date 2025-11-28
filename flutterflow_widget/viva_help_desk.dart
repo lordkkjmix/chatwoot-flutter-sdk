@@ -155,67 +155,96 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   /// Generate JavaScript to set user and custom attributes using $chatwoot SDK
+  /// Uses polling like React example to wait for $chatwoot to be available
   String _generateChatwootScript() {
-    final scripts = <String>[];
+    final userDataParts = <String>[];
+    final customAttrParts = <String>[];
 
-    // Set user if identifier provided
-    if (widget.userIdentifier != null && widget.userIdentifier!.isNotEmpty) {
-      final userData = <String, dynamic>{};
-      if (widget.userName != null) userData['name'] = widget.userName;
-      if (widget.userEmail != null) userData['email'] = widget.userEmail;
-      if (widget.userAvatarUrl != null) userData['avatar_url'] = widget.userAvatarUrl;
-
-      final userDataJson = jsonEncode(userData);
-      scripts.add('''
-        if (window.\$chatwoot && window.\$chatwoot.setUser) {
-          window.\$chatwoot.setUser('${widget.userIdentifier}', $userDataJson);
-        }
-      ''');
+    // Build user data object
+    if (widget.userName != null && widget.userName!.isNotEmpty) {
+      userDataParts.add("name: '${_escapeJs(widget.userName!)}'");
+    }
+    if (widget.userEmail != null && widget.userEmail!.isNotEmpty) {
+      userDataParts.add("email: '${_escapeJs(widget.userEmail!)}'");
+    }
+    if (widget.userAvatarUrl != null && widget.userAvatarUrl!.isNotEmpty) {
+      userDataParts.add("avatar_url: '${_escapeJs(widget.userAvatarUrl!)}'");
     }
 
-    // Set custom attributes
-    final customAttrs = <String, dynamic>{};
+    // Build custom attributes - using exact names from React example
     if (widget.tenantKey != null && widget.tenantKey!.isNotEmpty) {
-      customAttrs['tenant_key'] = widget.tenantKey;
+      customAttrParts.add("tenant: '${_escapeJs(widget.tenantKey!)}'");
     }
     if (widget.pushToken != null && widget.pushToken!.isNotEmpty) {
-      customAttrs['push_token'] = widget.pushToken;
+      customAttrParts.add("pushToken: '${_escapeJs(widget.pushToken!)}'");
     }
 
-    if (customAttrs.isNotEmpty) {
-      final attrsJson = jsonEncode(customAttrs);
-      scripts.add('''
-        if (window.\$chatwoot && window.\$chatwoot.setCustomAttributes) {
-          window.\$chatwoot.setCustomAttributes($attrsJson);
-        }
-      ''');
-    }
+    final hasUser = widget.userIdentifier != null && widget.userIdentifier!.isNotEmpty;
+    final hasCustomAttrs = customAttrParts.isNotEmpty;
+    final locale = widget.locale ?? 'en';
 
-    // Set locale
-    if (widget.locale != null) {
-      scripts.add('''
-        if (window.\$chatwoot && window.\$chatwoot.setLocale) {
-          window.\$chatwoot.setLocale('${widget.locale}');
-        }
-      ''');
-    }
+    if (!hasUser && !hasCustomAttrs) return '';
 
-    if (scripts.isEmpty) return '';
-
-    // Wrap in chatwoot:ready event listener OR direct call if already ready
+    // Use polling like React example: setInterval until $chatwoot is available
     return '''
-      (function() {
-        function initChatwoot() {
-          ${scripts.join('\n')}
-        }
+(function() {
+  console.log('VivaHelpDesk: Starting polling for \$chatwoot...');
+  var attempts = 0;
+  var maxAttempts = 60; // 30 seconds max
 
-        if (window.\$chatwoot) {
-          initChatwoot();
-        } else {
-          window.addEventListener('chatwoot:ready', initChatwoot);
-        }
-      })();
-    ''';
+  var waitForChat = setInterval(function() {
+    attempts++;
+    var chatwoot = window.\$chatwoot;
+
+    if (chatwoot) {
+      console.log('VivaHelpDesk: \$chatwoot found after ' + attempts + ' attempts');
+
+      ${hasUser ? '''
+      try {
+        chatwoot.setUser('${_escapeJs(widget.userIdentifier!)}', {
+          ${userDataParts.join(',\n          ')}
+        });
+        console.log('VivaHelpDesk: setUser called successfully');
+      } catch(e) {
+        console.error('VivaHelpDesk: setUser error:', e);
+      }
+      ''' : ''}
+
+      ${hasCustomAttrs ? '''
+      try {
+        chatwoot.setCustomAttributes({
+          ${customAttrParts.join(',\n          ')}
+        });
+        console.log('VivaHelpDesk: setCustomAttributes called successfully');
+      } catch(e) {
+        console.error('VivaHelpDesk: setCustomAttributes error:', e);
+      }
+      ''' : ''}
+
+      try {
+        chatwoot.setLocale('$locale');
+        console.log('VivaHelpDesk: setLocale called successfully');
+      } catch(e) {
+        console.error('VivaHelpDesk: setLocale error:', e);
+      }
+
+      clearInterval(waitForChat);
+    } else if (attempts >= maxAttempts) {
+      console.warn('VivaHelpDesk: \$chatwoot not found after ' + maxAttempts + ' attempts, giving up');
+      clearInterval(waitForChat);
+    }
+  }, 500);
+})();
+''';
+  }
+
+  /// Escape string for JavaScript
+  String _escapeJs(String s) {
+    return s
+        .replaceAll('\\', '\\\\')
+        .replaceAll("'", "\\'")
+        .replaceAll('\n', '\\n')
+        .replaceAll('\r', '\\r');
   }
 
   /// Generate postMessage script for mobile
