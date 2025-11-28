@@ -25,10 +25,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Platform-specific imports (only for non-web)
-import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart'
-    if (dart.library.html) 'dart:html';
-
 // ============================================================================
 // CHATWOOT USER MODEL
 // ============================================================================
@@ -395,23 +391,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         )
         ..loadRequest(Uri.parse(webviewUrl));
 
-      // Platform-specific configurations (skip on web)
-      if (!kIsWeb) {
-        final platform = Theme.of(context).platform;
-        debugPrint('Platform: $platform');
-
-        if (platform == TargetPlatform.iOS) {
-          // iOS-specific configuration for better Chatwoot WebView compatibility
-          try {
-            final wkWebViewController =
-                controller.platform as WebKitWebViewController;
-            wkWebViewController.setUserAgent(
-                'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 ChatwootFlutterSDK/0.1.0');
-          } catch (e) {
-            debugPrint('iOS user agent setup failed: $e');
-          }
-        }
-      }
+      debugPrint('WebView controller created successfully');
 
       if (mounted) {
         setState(() {
