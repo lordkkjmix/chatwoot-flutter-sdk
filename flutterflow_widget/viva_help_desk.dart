@@ -220,10 +220,17 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
     s.parentNode.insertBefore(g, s);
 
     g.onload = function() {
-      window.chatwootSDK.run({
-        websiteToken: '$websiteToken',
-        baseUrl: BASE_URL
-      });
+      // Try both SDK names (vivahelpdeskSDK for custom servers, chatwootSDK for standard)
+      var sdk = window.vivahelpdeskSDK || window.chatwootSDK;
+      if (sdk) {
+        sdk.run({
+          websiteToken: '$websiteToken',
+          baseUrl: BASE_URL
+        });
+      } else {
+        console.error('VivaHelpDesk: SDK not found');
+        return;
+      }
 
       var attempts = 0;
       var maxAttempts = 60;
