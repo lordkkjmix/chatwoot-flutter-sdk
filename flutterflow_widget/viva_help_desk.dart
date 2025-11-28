@@ -21,12 +21,13 @@ import 'package:flutter/material.dart';
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart'
-    as webview_flutter_android;
-import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// Platform-specific imports (only for non-web)
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart'
+    if (dart.library.html) 'dart:html';
 
 // ============================================================================
 // CHATWOOT USER MODEL
@@ -242,6 +243,22 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   void _initializeWidget() {
+    // Debug logging
+    debugPrint('===== VivaHelpDesk INIT =====');
+    debugPrint('websiteToken: ${widget.websiteToken}');
+    debugPrint('baseUrl: ${widget.baseUrl}');
+    debugPrint('userIdentifier: ${widget.userIdentifier}');
+    debugPrint('userName: ${widget.userName}');
+    debugPrint('userEmail: ${widget.userEmail}');
+    debugPrint('tenantKey: ${widget.tenantKey}');
+    debugPrint('pushToken: ${widget.pushToken}');
+    debugPrint('locale: ${widget.locale}');
+    debugPrint('showHeader: ${widget.showHeader}');
+    debugPrint('headerTitle: ${widget.headerTitle}');
+    debugPrint('isDark: ${widget.isDark}');
+    debugPrint('kIsWeb: $kIsWeb');
+    debugPrint('=============================');
+
     // Build custom attributes from tenantKey and pushToken
     Map<String, dynamic>? customAttributes;
     if (widget.tenantKey != null || widget.pushToken != null) {
@@ -273,12 +290,16 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
     _widgetUrl =
         "${widget.baseUrl}/widget?website_token=${widget.websiteToken}&locale=$locale";
 
+    debugPrint('Widget URL: $_widgetUrl');
+
     // Generate JavaScript for user/locale initialization
     _injectedJavaScript = _generateScripts(
       user: _user,
       locale: locale,
       customAttributes: customAttributes,
     );
+
+    debugPrint('Injected JS: $_injectedJavaScript');
 
     // Initialize WebView after frame is rendered
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -287,14 +308,17 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   Future<void> _setupWebView() async {
+    debugPrint('===== _setupWebView START =====');
     try {
       String webviewUrl = _widgetUrl;
 
       // Check for existing conversation cookie
       final cwCookie = await _StoreHelper.getCookie();
+      debugPrint('Cookie: $cwCookie');
       if (cwCookie.isNotEmpty) {
         webviewUrl = "$webviewUrl&cw_conversation=$cwCookie";
       }
+      debugPrint('Final webviewUrl: $webviewUrl');
 
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -362,18 +386,22 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         )
         ..loadRequest(Uri.parse(webviewUrl));
 
-      // Platform-specific configurations
-      if (Platform.isAndroid) {
-        // Android-specific setup
-        // File selector can be added here if needed
-      }
+      // Platform-specific configurations (skip on web)
+      if (!kIsWeb) {
+        final platform = Theme.of(context).platform;
+        debugPrint('Platform: $platform');
 
-      if (Platform.isIOS) {
-        // iOS-specific configuration for better Chatwoot WebView compatibility
-        final wkWebViewController =
-            controller.platform as WebKitWebViewController;
-        wkWebViewController.setUserAgent(
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 ChatwootFlutterSDK/0.1.0');
+        if (platform == TargetPlatform.iOS) {
+          // iOS-specific configuration for better Chatwoot WebView compatibility
+          try {
+            final wkWebViewController =
+                controller.platform as WebKitWebViewController;
+            wkWebViewController.setUserAgent(
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1 ChatwootFlutterSDK/0.1.0');
+          } catch (e) {
+            debugPrint('iOS user agent setup failed: $e');
+          }
+        }
       }
 
       if (mounted) {
