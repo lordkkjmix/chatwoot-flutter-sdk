@@ -165,7 +165,6 @@ class VivaHelpDesk extends StatefulWidget {
     this.tenantKey,
     this.pushToken,
     this.locale,
-    this.customAttributes,
     required this.showHeader,
     required this.headerTitle,
     this.headerBackgroundColor,
@@ -205,9 +204,6 @@ class VivaHelpDesk extends StatefulWidget {
   /// User locale/language (default: "en")
   final String? locale;
 
-  /// Custom attributes to pass to Chatwoot
-  final dynamic customAttributes;
-
   /// Whether to show the header bar
   final bool showHeader;
 
@@ -246,6 +242,18 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   void _initializeWidget() {
+    // Build custom attributes from tenantKey and pushToken
+    Map<String, dynamic>? customAttributes;
+    if (widget.tenantKey != null || widget.pushToken != null) {
+      customAttributes = {};
+      if (widget.tenantKey != null) {
+        customAttributes['tenant_key'] = widget.tenantKey;
+      }
+      if (widget.pushToken != null) {
+        customAttributes['push_token'] = widget.pushToken;
+      }
+    }
+
     // Build user object if user data is provided
     if (widget.userIdentifier != null ||
         widget.userName != null ||
@@ -255,7 +263,6 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         name: widget.userName,
         email: widget.userEmail,
         avatarUrl: widget.userAvatarUrl,
-        customAttributes: widget.customAttributes,
       );
     } else {
       _user = null;
@@ -270,7 +277,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
     _injectedJavaScript = _generateScripts(
       user: _user,
       locale: locale,
-      customAttributes: widget.customAttributes,
+      customAttributes: customAttributes,
     );
 
     // Initialize WebView after frame is rendered
