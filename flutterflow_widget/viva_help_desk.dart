@@ -4,7 +4,7 @@
 //   webview_flutter: ^4.13.0
 //   webview_flutter_android: ^4.7.0
 //   webview_flutter_wkwebview: ^3.22.0
-//   flutter_secure_storage: ^9.2.2
+//   shared_preferences: (already included in FlutterFlow)
 //
 // Automatic FlutterFlow imports
 import '/backend/schema/structs/index.dart';
@@ -23,7 +23,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Platform-specific imports (only for non-web)
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart'
@@ -128,23 +128,32 @@ String _generateScripts({
 }
 
 // ============================================================================
-// SECURE STORAGE HELPER
+// STORAGE HELPER (using SharedPreferences)
 // ============================================================================
 
-const _androidOptions = AndroidOptions(
-  encryptedSharedPreferences: true,
-);
-final _secureStorage = FlutterSecureStorage(aOptions: _androidOptions);
-const _cookieKey = 'cwCookie';
+const _cookieKey = 'chatwoot_cw_cookie';
 
 class _StoreHelper {
   static Future<String> getCookie() async {
-    final cookie = await _secureStorage.read(key: _cookieKey);
-    return cookie ?? "";
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cookie = prefs.getString(_cookieKey);
+      debugPrint('_StoreHelper.getCookie: $cookie');
+      return cookie ?? "";
+    } catch (e) {
+      debugPrint('_StoreHelper.getCookie error: $e');
+      return "";
+    }
   }
 
   static Future<void> storeCookie(String value) async {
-    await _secureStorage.write(key: _cookieKey, value: value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cookieKey, value);
+      debugPrint('_StoreHelper.storeCookie: $value');
+    } catch (e) {
+      debugPrint('_StoreHelper.storeCookie error: $e');
+    }
   }
 }
 
