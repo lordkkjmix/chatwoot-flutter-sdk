@@ -4,7 +4,10 @@
 //   webview_flutter: ^4.13.0
 //   webview_flutter_android: ^4.7.0
 //   webview_flutter_wkwebview: ^3.22.0
+//   webview_flutter_web: ^0.2.3+4    <-- ADD THIS FOR WEB SUPPORT!
 //   shared_preferences: (already included in FlutterFlow)
+//
+// IMPORTANT: webview_flutter_web enables WebView on Flutter Web using iframe.
 //
 // Automatic FlutterFlow imports
 import '/backend/schema/structs/index.dart';
@@ -22,8 +25,9 @@ import 'package:flutter/material.dart';
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_web/webview_flutter_web.dart';
 
 // ============================================================================
 // CHATWOOT USER MODEL
@@ -236,6 +240,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   WebViewController? _controller;
   bool _isLoading = true;
   String? _errorMessage;
+  bool _webPlatformRegistered = false;
 
   late final String _widgetUrl;
   late final String _injectedJavaScript;
@@ -263,6 +268,13 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
     debugPrint('isDark: ${widget.isDark}');
     debugPrint('kIsWeb: $kIsWeb');
     debugPrint('=============================');
+
+    // Register web platform if running on web
+    if (kIsWeb && !_webPlatformRegistered) {
+      WebViewPlatform.instance = WebWebViewPlatform();
+      _webPlatformRegistered = true;
+      debugPrint('WebWebViewPlatform registered for web');
+    }
 
     // Build custom attributes from tenantKey and pushToken
     Map<String, dynamic>? customAttributes;
@@ -347,6 +359,10 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
                   _isLoading = false;
                 });
               }
+              // On web, inject scripts after page load
+              if (kIsWeb && _injectedJavaScript.isNotEmpty) {
+                _controller?.runJavaScript(_injectedJavaScript);
+              }
             },
             onWebResourceError: (WebResourceError error) {
               if (mounted) {
@@ -361,8 +377,11 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
               return NavigationDecision.navigate;
             },
           ),
-        )
-        ..addJavaScriptChannel(
+        );
+
+      // Add JavaScript channel only on mobile (not supported on web)
+      if (!kIsWeb) {
+        controller.addJavaScriptChannel(
           "ReactNativeWebView",
           onMessageReceived: (JavaScriptMessage jsMessage) {
             debugPrint("Chatwoot message received: ${jsMessage.message}");
@@ -388,8 +407,10 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
               }
             }
           },
-        )
-        ..loadRequest(Uri.parse(webviewUrl));
+        );
+      }
+
+      controller.loadRequest(Uri.parse(webviewUrl));
 
       debugPrint('WebView controller created successfully');
 
@@ -399,6 +420,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         });
       }
     } catch (e) {
+      debugPrint('_setupWebView error: $e');
       if (mounted) {
         setState(() {
           _errorMessage = 'Failed to initialize chat: $e';
@@ -423,7 +445,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
           // Header (optional)
           if (widget.showHeader) _buildHeader(),
 
-          // Chat WebView
+          // Chat content
           Expanded(
             child: _buildChatContent(),
           ),
