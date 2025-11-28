@@ -317,9 +317,9 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
           if (kIsWeb) {
             // Use $chatwoot SDK on web
             final script = _generateChatwootScript();
-            print('DEBUG: Web $chatwoot SDK script generated (${script.length} chars)');
+            print('DEBUG: Web \$chatwoot SDK script generated (${script.length} chars)');
             if (script.isNotEmpty) {
-              print('DEBUG: Injecting $chatwoot script...');
+              print('DEBUG: Injecting \$chatwoot script...');
               _controller?.runJavaScript(script);
             }
           }
