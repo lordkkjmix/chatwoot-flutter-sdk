@@ -4,9 +4,8 @@
 //   webview_flutter: ^4.13.0
 //   webview_flutter_android: ^4.7.0
 //   webview_flutter_wkwebview: ^3.22.0
+//   webview_flutter_web: ^0.2.3+4
 //   shared_preferences: (already included in FlutterFlow)
-//
-// NOTE: WebView works on iOS/Android only. On Web shows a message.
 //
 // Automatic FlutterFlow imports
 import '/backend/schema/structs/index.dart';
@@ -26,6 +25,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_web/webview_flutter_web.dart';
 
 // ============================================================================
 // CHATWOOT USER MODEL
@@ -33,93 +33,67 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class _ChatwootUser {
   final String? identifier;
-  final String? identifierHash;
   final String? name;
   final String? email;
   final String? avatarUrl;
-  final dynamic customAttributes;
 
   _ChatwootUser({
     this.identifier,
-    this.identifierHash,
     this.name,
     this.email,
     this.avatarUrl,
-    this.customAttributes,
   });
 
   Map<String, dynamic> toJson() => {
         if (identifier != null) 'identifier': identifier,
-        if (identifierHash != null) 'identifier_hash': identifierHash,
         if (name != null) 'name': name,
         if (email != null) 'email': email,
         if (avatarUrl != null) 'avatar_url': avatarUrl,
-        if (customAttributes != null) 'custom_attributes': customAttributes,
       };
 }
 
 // ============================================================================
-// CONSTANTS
+// CONSTANTS & UTILITIES
 // ============================================================================
 
 const _WOOT_PREFIX = 'chatwoot-widget:';
 
-class _PostMessageEvents {
-  static const SET_LOCALE = 'set-locale';
-  static const SET_CUSTOM_ATTRIBUTES = 'set-custom-attributes';
-  static const SET_USER = 'set-user';
+String _createWootPostMessage(Map<String, dynamic> object) {
+  return "window.postMessage('$_WOOT_PREFIX${jsonEncode(object)}');";
 }
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+String _getMessage(String data) => data.replaceAll(_WOOT_PREFIX, '');
 
-bool _isJsonString(String string) {
+bool _isJsonString(String s) {
   try {
-    jsonDecode(string);
+    jsonDecode(s);
     return true;
-  } catch (e) {
+  } catch (_) {
     return false;
   }
-}
-
-String _createWootPostMessage(Map<String, dynamic> object) {
-  final stringfyObject = "$_WOOT_PREFIX${jsonEncode(object)}";
-  final script = "window.postMessage('$stringfyObject');";
-  return script;
-}
-
-String _getMessage(String data) {
-  return data.replaceAll(_WOOT_PREFIX, '');
 }
 
 String _generateScripts({
   _ChatwootUser? user,
   String? locale,
-  dynamic customAttributes,
+  Map<String, dynamic>? customAttributes,
 }) {
   String script = '';
   if (user != null) {
-    final userObject = {
-      "event": _PostMessageEvents.SET_USER,
+    script += _createWootPostMessage({
+      "event": "set-user",
       "identifier": user.identifier,
       "user": user.toJson(),
-    };
-    script += _createWootPostMessage(userObject);
+    });
   }
   if (locale != null) {
-    final localeObject = {
-      "event": _PostMessageEvents.SET_LOCALE,
-      "locale": locale
-    };
-    script += _createWootPostMessage(localeObject);
+    script += _createWootPostMessage({"event": "set-locale", "locale": locale});
   }
   if (customAttributes != null) {
-    final attributeObject = {
-      "event": _PostMessageEvents.SET_CUSTOM_ATTRIBUTES,
+    script += _createWootPostMessage({
+      "event": "set-custom-attributes",
       "customAttributes": customAttributes,
-    };
-    script += _createWootPostMessage(attributeObject);
+    });
   }
   return script;
 }
@@ -134,9 +108,8 @@ class _StoreHelper {
   static Future<String> getCookie() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cookie = prefs.getString(_cookieKey);
-      return cookie ?? "";
-    } catch (e) {
+      return prefs.getString(_cookieKey) ?? "";
+    } catch (_) {
       return "";
     }
   }
@@ -145,9 +118,7 @@ class _StoreHelper {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_cookieKey, value);
-    } catch (e) {
-      // ignore
-    }
+    } catch (_) {}
   }
 }
 
@@ -203,10 +174,10 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   WebViewController? _controller;
   bool _isLoading = true;
   String? _errorMessage;
+  static bool _webPlatformRegistered = false;
 
   late final String _widgetUrl;
   late final String _injectedJavaScript;
-  late final _ChatwootUser? _user;
 
   @override
   void initState() {
@@ -215,7 +186,13 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   void _initializeWidget() {
-    // Build custom attributes from tenantKey and pushToken
+    // Register web platform ONCE
+    if (kIsWeb && !_webPlatformRegistered) {
+      WebViewPlatform.instance = WebWebViewPlatform();
+      _webPlatformRegistered = true;
+    }
+
+    // Build custom attributes
     Map<String, dynamic>? customAttributes;
     if (widget.tenantKey != null || widget.pushToken != null) {
       customAttributes = {};
@@ -227,109 +204,92 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
       }
     }
 
-    // Build user object if user data is provided
+    // Build user
+    _ChatwootUser? user;
     if (widget.userIdentifier != null ||
         widget.userName != null ||
         widget.userEmail != null) {
-      _user = _ChatwootUser(
+      user = _ChatwootUser(
         identifier: widget.userIdentifier,
         name: widget.userName,
         email: widget.userEmail,
         avatarUrl: widget.userAvatarUrl,
       );
-    } else {
-      _user = null;
     }
 
-    // Build widget URL
+    // Build URL
     final locale = widget.locale ?? "en";
     _widgetUrl =
         "${widget.baseUrl}/widget?website_token=${widget.websiteToken}&locale=$locale";
 
-    // Generate JavaScript for user/locale initialization
+    // Generate JS
     _injectedJavaScript = _generateScripts(
-      user: _user,
+      user: user,
       locale: locale,
       customAttributes: customAttributes,
     );
 
-    // On web - don't initialize WebView (not supported)
-    if (kIsWeb) {
-      setState(() {
-        _isLoading = false;
-      });
-      return;
-    }
-
-    // Initialize WebView after frame is rendered (mobile only)
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _setupWebView();
-    });
+    // Setup WebView
+    WidgetsBinding.instance.addPostFrameCallback((_) => _setupWebView());
   }
 
   Future<void> _setupWebView() async {
     try {
-      String webviewUrl = _widgetUrl;
-
-      // Check for existing conversation cookie
-      final cwCookie = await _StoreHelper.getCookie();
-      if (cwCookie.isNotEmpty) {
-        webviewUrl = "$webviewUrl&cw_conversation=$cwCookie";
+      String url = _widgetUrl;
+      final cookie = await _StoreHelper.getCookie();
+      if (cookie.isNotEmpty) {
+        url = "$url&cw_conversation=$cookie";
       }
 
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(
-            widget.isDark == true ? Colors.black : Colors.white)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageStarted: (String url) {
-              if (mounted) {
-                setState(() => _isLoading = true);
-              }
-            },
-            onPageFinished: (String url) {
-              if (mounted) {
-                setState(() => _isLoading = false);
-              }
-            },
-            onWebResourceError: (WebResourceError error) {
-              if (mounted) {
-                setState(() {
-                  _errorMessage = 'Error: ${error.description}';
-                  _isLoading = false;
-                });
-              }
-            },
-          ),
-        )
-        ..addJavaScriptChannel(
-          "ReactNativeWebView",
-          onMessageReceived: (JavaScriptMessage jsMessage) {
-            final message = _getMessage(jsMessage.message);
-            if (_isJsonString(message)) {
-              final parsedMessage = jsonDecode(message);
-              final eventType = parsedMessage["event"];
+        ..setBackgroundColor(widget.isDark == true ? Colors.black : Colors.white)
+        ..setNavigationDelegate(NavigationDelegate(
+          onPageStarted: (_) {
+            if (mounted) setState(() => _isLoading = true);
+          },
+          onPageFinished: (_) {
+            if (mounted) setState(() => _isLoading = false);
+            // Inject scripts on web after page load
+            if (kIsWeb && _injectedJavaScript.isNotEmpty) {
+              _controller?.runJavaScript(_injectedJavaScript);
+            }
+          },
+          onWebResourceError: (error) {
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Error: ${error.description}';
+                _isLoading = false;
+              });
+            }
+          },
+        ));
 
-              if (eventType == 'loaded') {
-                final authToken = parsedMessage["config"]?["authToken"];
-                if (authToken != null) {
-                  _StoreHelper.storeCookie(authToken);
-                }
+      // JS channel only for mobile
+      if (!kIsWeb) {
+        controller.addJavaScriptChannel(
+          "ReactNativeWebView",
+          onMessageReceived: (msg) {
+            final message = _getMessage(msg.message);
+            if (_isJsonString(message)) {
+              final parsed = jsonDecode(message);
+              if (parsed["event"] == 'loaded') {
+                final token = parsed["config"]?["authToken"];
+                if (token != null) _StoreHelper.storeCookie(token);
                 _controller?.runJavaScript(_injectedJavaScript);
               }
             }
           },
-        )
-        ..loadRequest(Uri.parse(webviewUrl));
-
-      if (mounted) {
-        setState(() => _controller = controller);
+        );
       }
+
+      controller.loadRequest(Uri.parse(url));
+
+      if (mounted) setState(() => _controller = controller);
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Failed to initialize: $e';
+          _errorMessage = 'Failed: $e';
           _isLoading = false;
         });
       }
@@ -356,31 +316,27 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   Widget _buildHeader() {
-    final bgColor = widget.headerBackgroundColor ??
+    final bg = widget.headerBackgroundColor ??
         (widget.isDark == true ? Colors.grey[900] : Colors.blue);
-    final txtColor = widget.headerTextColor ?? Colors.white;
+    final txt = widget.headerTextColor ?? Colors.white;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: bgColor,
+      color: bg,
       child: Row(
         children: [
-          Icon(Icons.chat_bubble_outline, color: txtColor, size: 24),
+          Icon(Icons.chat_bubble_outline, color: txt, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               widget.headerTitle,
-              style: TextStyle(
-                color: txtColor,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: txt, fontSize: 18, fontWeight: FontWeight.w600),
             ),
           ),
           if (widget.showCloseButton ?? false)
             IconButton(
-              icon: Icon(Icons.close, color: txtColor),
+              icon: Icon(Icons.close, color: txt),
               onPressed: () => Navigator.of(context).maybePop(),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
@@ -391,96 +347,52 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   }
 
   Widget _buildContent() {
-    // Web platform - show message
-    if (kIsWeb) {
-      return _buildWebMessage();
-    }
-
-    // Error state
     if (_errorMessage != null) {
-      return _buildError();
-    }
-
-    // Loading state
-    if (_controller == null) {
-      return _buildLoading();
-    }
-
-    // WebView
-    return Stack(
-      children: [
-        WebViewWidget(controller: _controller!),
-        if (_isLoading) _buildLoading(),
-      ],
-    );
-  }
-
-  Widget _buildWebMessage() {
-    final txtColor = widget.isDark == true ? Colors.white70 : Colors.black54;
-    final accent = widget.headerBackgroundColor ?? Colors.blue;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.phone_android, size: 64, color: accent),
-            const SizedBox(height: 24),
-            Text(
-              'Чат доступен в мобильном приложении',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: widget.isDark == true ? Colors.white : Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Для тестирования используйте Test Mode на реальном устройстве iOS или Android',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: txtColor),
+            Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
+            const SizedBox(height: 16),
+            Text(_errorMessage!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _errorMessage = null;
+                  _isLoading = true;
+                });
+                _setupWebView();
+              },
+              child: const Text('Повторить'),
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-          const SizedBox(height: 16),
-          Text(_errorMessage!, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _errorMessage = null;
-                _isLoading = true;
-              });
-              _setupWebView();
-            },
-            child: const Text('Повторить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoading() {
-    return Container(
-      color: (widget.isDark == true ? Colors.black : Colors.white)
-          .withOpacity(0.7),
-      child: Center(
+    if (_controller == null) {
+      return Center(
         child: CircularProgressIndicator(
           color: widget.headerBackgroundColor ?? Colors.blue,
         ),
-      ),
+      );
+    }
+
+    return Stack(
+      children: [
+        WebViewWidget(controller: _controller!),
+        if (_isLoading)
+          Container(
+            color: (widget.isDark == true ? Colors.black : Colors.white)
+                .withOpacity(0.7),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: widget.headerBackgroundColor ?? Colors.blue,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
