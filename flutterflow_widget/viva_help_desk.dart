@@ -264,17 +264,21 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   Future<void> _setupWebView() async {
     try {
       String url = _buildWidgetUrl();
+      print('DEBUG: Built URL with dark_mode: $url');
 
       // Add conversation cookie if exists
       final cookie = await _StoreHelper.getCookie();
       if (cookie.isNotEmpty) {
         url = "$url&cw_conversation=$cookie";
       }
+      print('DEBUG: Final URL: $url');
+      print('DEBUG: kIsWeb = $kIsWeb');
 
       final controller = WebViewController();
 
       // Mobile-only methods (not supported on web)
       if (!kIsWeb) {
+        print('DEBUG: Applying mobile-only settings (setJavaScriptMode, etc.)');
         controller.setJavaScriptMode(JavaScriptMode.unrestricted);
         controller.setBackgroundColor(
             widget.isDark == true ? Colors.black : Colors.white);
@@ -289,6 +293,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
                 if (token != null) _StoreHelper.storeCookie(token);
                 // Inject user data after widget loaded
                 final script = _generatePostMessageScript();
+                print('DEBUG: Mobile postMessage script: ${script.substring(0, script.length > 100 ? 100 : script.length)}...');
                 if (script.isNotEmpty) {
                   _controller?.runJavaScript(script);
                 }
@@ -296,6 +301,8 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
             }
           },
         );
+      } else {
+        print('DEBUG: Skipping mobile-only settings on web');
       }
 
       controller.setNavigationDelegate(NavigationDelegate(
@@ -303,13 +310,16 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
           if (mounted) setState(() => _isLoading = true);
         },
         onPageFinished: (_) {
+          print('DEBUG: Page finished loading');
           if (mounted) setState(() => _isLoading = false);
 
           // Inject scripts after page load
           if (kIsWeb) {
             // Use $chatwoot SDK on web
             final script = _generateChatwootScript();
+            print('DEBUG: Web $chatwoot SDK script generated (${script.length} chars)');
             if (script.isNotEmpty) {
+              print('DEBUG: Injecting $chatwoot script...');
               _controller?.runJavaScript(script);
             }
           }
