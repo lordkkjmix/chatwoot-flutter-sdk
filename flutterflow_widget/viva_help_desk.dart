@@ -305,17 +305,36 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         print('DEBUG: Skipping mobile-only settings on web');
       }
 
-      controller.setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (_) {
-          if (mounted) setState(() => _isLoading = true);
-        },
-        onPageFinished: (_) {
-          print('DEBUG: Page finished loading');
-          if (mounted) setState(() => _isLoading = false);
+      // NavigationDelegate - only on mobile
+      if (!kIsWeb) {
+        controller.setNavigationDelegate(NavigationDelegate(
+          onPageStarted: (_) {
+            if (mounted) setState(() => _isLoading = true);
+          },
+          onPageFinished: (_) {
+            print('DEBUG: Page finished loading (mobile)');
+            if (mounted) setState(() => _isLoading = false);
+          },
+          onWebResourceError: (error) {
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Error: ${error.description}';
+                _isLoading = false;
+              });
+            }
+          },
+        ));
+      }
 
-          // Inject scripts after page load
-          if (kIsWeb) {
-            // Use $chatwoot SDK on web
+      controller.loadRequest(Uri.parse(url));
+
+      if (mounted) setState(() => _controller = controller);
+
+      // For web: inject script after delay and hide loading
+      if (kIsWeb) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() => _isLoading = false);
             final script = _generateChatwootScript();
             print('DEBUG: Web \$chatwoot SDK script generated (${script.length} chars)');
             if (script.isNotEmpty) {
@@ -323,20 +342,8 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
               _controller?.runJavaScript(script);
             }
           }
-        },
-        onWebResourceError: (error) {
-          if (mounted) {
-            setState(() {
-              _errorMessage = 'Error: ${error.description}';
-              _isLoading = false;
-            });
-          }
-        },
-      ));
-
-      controller.loadRequest(Uri.parse(url));
-
-      if (mounted) setState(() => _controller = controller);
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
