@@ -28,39 +28,10 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_web/webview_flutter_web.dart';
 
 // ============================================================================
-// CHATWOOT USER MODEL
-// ============================================================================
-
-class _ChatwootUser {
-  final String? identifier;
-  final String? name;
-  final String? email;
-  final String? avatarUrl;
-
-  _ChatwootUser({
-    this.identifier,
-    this.name,
-    this.email,
-    this.avatarUrl,
-  });
-
-  Map<String, dynamic> toJson() => {
-        if (identifier != null) 'identifier': identifier,
-        if (name != null) 'name': name,
-        if (email != null) 'email': email,
-        if (avatarUrl != null) 'avatar_url': avatarUrl,
-      };
-}
-
-// ============================================================================
-// CONSTANTS & UTILITIES
+// CONSTANTS
 // ============================================================================
 
 const _WOOT_PREFIX = 'chatwoot-widget:';
-
-String _createWootPostMessage(Map<String, dynamic> object) {
-  return "window.postMessage('$_WOOT_PREFIX${jsonEncode(object)}');";
-}
 
 String _getMessage(String data) => data.replaceAll(_WOOT_PREFIX, '');
 
@@ -71,31 +42,6 @@ bool _isJsonString(String s) {
   } catch (_) {
     return false;
   }
-}
-
-String _generateScripts({
-  _ChatwootUser? user,
-  String? locale,
-  Map<String, dynamic>? customAttributes,
-}) {
-  String script = '';
-  if (user != null) {
-    script += _createWootPostMessage({
-      "event": "set-user",
-      "identifier": user.identifier,
-      "user": user.toJson(),
-    });
-  }
-  if (locale != null) {
-    script += _createWootPostMessage({"event": "set-locale", "locale": locale});
-  }
-  if (customAttributes != null) {
-    script += _createWootPostMessage({
-      "event": "set-custom-attributes",
-      "customAttributes": customAttributes,
-    });
-  }
-  return script;
 }
 
 // ============================================================================
@@ -176,9 +122,6 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
   String? _errorMessage;
   static bool _webPlatformRegistered = false;
 
-  late final String _widgetUrl;
-  late final String _injectedJavaScript;
-
   @override
   void initState() {
     super.initState();
@@ -192,50 +135,137 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
       _webPlatformRegistered = true;
     }
 
-    // Build custom attributes
-    Map<String, dynamic>? customAttributes;
-    if (widget.tenantKey != null || widget.pushToken != null) {
-      customAttributes = {};
-      if (widget.tenantKey != null) {
-        customAttributes['tenant_key'] = widget.tenantKey;
-      }
-      if (widget.pushToken != null) {
-        customAttributes['push_token'] = widget.pushToken;
-      }
-    }
-
-    // Build user
-    _ChatwootUser? user;
-    if (widget.userIdentifier != null ||
-        widget.userName != null ||
-        widget.userEmail != null) {
-      user = _ChatwootUser(
-        identifier: widget.userIdentifier,
-        name: widget.userName,
-        email: widget.userEmail,
-        avatarUrl: widget.userAvatarUrl,
-      );
-    }
-
-    // Build URL
-    final locale = widget.locale ?? "en";
-    _widgetUrl =
-        "${widget.baseUrl}/widget?website_token=${widget.websiteToken}&locale=$locale";
-
-    // Generate JS
-    _injectedJavaScript = _generateScripts(
-      user: user,
-      locale: locale,
-      customAttributes: customAttributes,
-    );
-
     // Setup WebView
     WidgetsBinding.instance.addPostFrameCallback((_) => _setupWebView());
   }
 
+  /// Build URL with all parameters
+  String _buildWidgetUrl() {
+    final locale = widget.locale ?? "en";
+    final darkMode = widget.isDark == true ? "dark" : "light";
+
+    final params = <String, String>{
+      'website_token': widget.websiteToken,
+      'locale': locale,
+      'dark_mode': darkMode,
+    };
+
+    final uri = Uri.parse('${widget.baseUrl}/widget').replace(queryParameters: params);
+    return uri.toString();
+  }
+
+  /// Generate JavaScript to set user and custom attributes using $chatwoot SDK
+  String _generateChatwootScript() {
+    final scripts = <String>[];
+
+    // Set user if identifier provided
+    if (widget.userIdentifier != null && widget.userIdentifier!.isNotEmpty) {
+      final userData = <String, dynamic>{};
+      if (widget.userName != null) userData['name'] = widget.userName;
+      if (widget.userEmail != null) userData['email'] = widget.userEmail;
+      if (widget.userAvatarUrl != null) userData['avatar_url'] = widget.userAvatarUrl;
+
+      final userDataJson = jsonEncode(userData);
+      scripts.add('''
+        if (window.\$chatwoot && window.\$chatwoot.setUser) {
+          window.\$chatwoot.setUser('${widget.userIdentifier}', $userDataJson);
+        }
+      ''');
+    }
+
+    // Set custom attributes
+    final customAttrs = <String, dynamic>{};
+    if (widget.tenantKey != null && widget.tenantKey!.isNotEmpty) {
+      customAttrs['tenant_key'] = widget.tenantKey;
+    }
+    if (widget.pushToken != null && widget.pushToken!.isNotEmpty) {
+      customAttrs['push_token'] = widget.pushToken;
+    }
+
+    if (customAttrs.isNotEmpty) {
+      final attrsJson = jsonEncode(customAttrs);
+      scripts.add('''
+        if (window.\$chatwoot && window.\$chatwoot.setCustomAttributes) {
+          window.\$chatwoot.setCustomAttributes($attrsJson);
+        }
+      ''');
+    }
+
+    // Set locale
+    if (widget.locale != null) {
+      scripts.add('''
+        if (window.\$chatwoot && window.\$chatwoot.setLocale) {
+          window.\$chatwoot.setLocale('${widget.locale}');
+        }
+      ''');
+    }
+
+    if (scripts.isEmpty) return '';
+
+    // Wrap in chatwoot:ready event listener OR direct call if already ready
+    return '''
+      (function() {
+        function initChatwoot() {
+          ${scripts.join('\n')}
+        }
+
+        if (window.\$chatwoot) {
+          initChatwoot();
+        } else {
+          window.addEventListener('chatwoot:ready', initChatwoot);
+        }
+      })();
+    ''';
+  }
+
+  /// Generate postMessage script for mobile
+  String _generatePostMessageScript() {
+    final scripts = <String>[];
+
+    // Set user
+    if (widget.userIdentifier != null) {
+      final userData = <String, dynamic>{
+        'identifier': widget.userIdentifier,
+      };
+      if (widget.userName != null) userData['name'] = widget.userName;
+      if (widget.userEmail != null) userData['email'] = widget.userEmail;
+      if (widget.userAvatarUrl != null) userData['avatar_url'] = widget.userAvatarUrl;
+
+      final msg = jsonEncode({
+        'event': 'set-user',
+        'identifier': widget.userIdentifier,
+        'user': userData,
+      });
+      scripts.add("window.postMessage('$_WOOT_PREFIX$msg');");
+    }
+
+    // Set locale
+    if (widget.locale != null) {
+      final msg = jsonEncode({'event': 'set-locale', 'locale': widget.locale});
+      scripts.add("window.postMessage('$_WOOT_PREFIX$msg');");
+    }
+
+    // Set custom attributes
+    final customAttrs = <String, dynamic>{};
+    if (widget.tenantKey != null) customAttrs['tenant_key'] = widget.tenantKey;
+    if (widget.pushToken != null) customAttrs['push_token'] = widget.pushToken;
+
+    if (customAttrs.isNotEmpty) {
+      final msg = jsonEncode({
+        'event': 'set-custom-attributes',
+        'customAttributes': customAttrs,
+      });
+      scripts.add("window.postMessage('$_WOOT_PREFIX$msg');");
+    }
+
+    return scripts.join('\n');
+  }
+
   Future<void> _setupWebView() async {
     try {
-      String url = _widgetUrl;
+      String url = _buildWidgetUrl();
+
+      // Add conversation cookie if exists
       final cookie = await _StoreHelper.getCookie();
       if (cookie.isNotEmpty) {
         url = "$url&cw_conversation=$cookie";
@@ -243,7 +273,7 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
 
       final controller = WebViewController();
 
-      // These methods are NOT supported on web - only call on mobile
+      // Mobile-only methods (not supported on web)
       if (!kIsWeb) {
         controller.setJavaScriptMode(JavaScriptMode.unrestricted);
         controller.setBackgroundColor(
@@ -257,7 +287,11 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
               if (parsed["event"] == 'loaded') {
                 final token = parsed["config"]?["authToken"];
                 if (token != null) _StoreHelper.storeCookie(token);
-                _controller?.runJavaScript(_injectedJavaScript);
+                // Inject user data after widget loaded
+                final script = _generatePostMessageScript();
+                if (script.isNotEmpty) {
+                  _controller?.runJavaScript(script);
+                }
               }
             }
           },
@@ -270,9 +304,14 @@ class _VivaHelpDeskState extends State<VivaHelpDesk> {
         },
         onPageFinished: (_) {
           if (mounted) setState(() => _isLoading = false);
-          // Inject scripts on web after page load
-          if (kIsWeb && _injectedJavaScript.isNotEmpty) {
-            _controller?.runJavaScript(_injectedJavaScript);
+
+          // Inject scripts after page load
+          if (kIsWeb) {
+            // Use $chatwoot SDK on web
+            final script = _generateChatwootScript();
+            if (script.isNotEmpty) {
+              _controller?.runJavaScript(script);
+            }
           }
         },
         onWebResourceError: (error) {
