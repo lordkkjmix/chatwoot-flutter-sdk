@@ -1,3 +1,11 @@
+// FlutterFlow Custom Widget - VivaHelpDesk (Chatwoot Chat)
+//
+// DEPENDENCIES (add to pubspec.yaml):
+//   webview_flutter: ^4.13.0
+//   webview_flutter_android: ^4.7.0
+//   webview_flutter_wkwebview: ^3.22.0
+//   flutter_secure_storage: ^9.2.2
+//
 // Automatic FlutterFlow imports
 import '/backend/schema/structs/index.dart';
 import '/backend/schema/enums/enums.dart';
