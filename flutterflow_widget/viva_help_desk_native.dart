@@ -1,29 +1,17 @@
-// FlutterFlow Custom Widget - VivaHelpDesk Native (Chatwoot Chat)
-//
-// DEPENDENCIES (add to pubspec.yaml):
+// Automatic FlutterFlow imports
+import 'package:flutter/material.dart';
+// Begin custom widget code
+// DO NOT REMOVE OR MODIFY THE CODE ABOVE!
+
+// DEPENDENCIES (add to pubspec.yaml in FlutterFlow):
 //   dio: ^5.7.0
 //   web_socket_channel: ^3.0.1
 //   image_picker: ^1.0.7
 //   flutter_chat_ui: ^2.9.1
 //   flutter_chat_types: ^3.6.2
 //   uuid: ^4.5.1
-//   record: ^5.1.0 (optional, for audio recording)
 //   shared_preferences: (already included in FlutterFlow)
 //   intl: (already included in FlutterFlow)
-//
-// Automatic FlutterFlow imports
-import '/backend/schema/structs/index.dart';
-import '/backend/schema/enums/enums.dart';
-import '/backend/supabase/supabase.dart';
-import '/actions/actions.dart' as action_blocks;
-import 'package:ff_theme/flutter_flow/flutter_flow_theme.dart';
-import '/flutter_flow/flutter_flow_util.dart';
-import '/custom_code/widgets/index.dart';
-import '/custom_code/actions/index.dart';
-import '/flutter_flow/custom_functions.dart';
-import 'package:flutter/material.dart';
-// Begin custom widget code
-// DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
 import 'dart:async';
 import 'dart:convert';
