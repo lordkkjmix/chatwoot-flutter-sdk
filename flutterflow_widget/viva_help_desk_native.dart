@@ -741,7 +741,6 @@ class VivaHelpDeskNative extends StatefulWidget {
     // Custom attributes
     this.tenantKey,
     this.pushToken,
-    this.customAttributesJson,
     // Settings
     this.isDark = false,
     this.locale = 'ru',
@@ -770,7 +769,6 @@ class VivaHelpDeskNative extends StatefulWidget {
   // Custom attributes
   final String? tenantKey;
   final String? pushToken;
-  final String? customAttributesJson; // JSON string, e.g. '{"key": "value"}'
 
   // Settings
   final bool isDark;
@@ -846,13 +844,6 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
       final customAttrs = <String, dynamic>{};
       if (widget.tenantKey != null) customAttrs['tenant'] = widget.tenantKey;
       if (widget.pushToken != null) customAttrs['pushToken'] = widget.pushToken;
-      // Parse custom attributes from JSON string
-      if (widget.customAttributesJson != null && widget.customAttributesJson!.isNotEmpty) {
-        try {
-          final parsed = jsonDecode(widget.customAttributesJson!) as Map<String, dynamic>;
-          customAttrs.addAll(parsed);
-        } catch (_) {}
-      }
 
       // Create/get contact
       await _apiService.createOrGetContact(
@@ -1861,7 +1852,6 @@ class VivaHelpDeskBubble extends StatefulWidget {
     // Custom attributes
     this.tenantKey,
     this.pushToken,
-    this.customAttributesJson,
     // Settings
     this.isDark = false,
     this.locale = 'ru',
@@ -1887,7 +1877,6 @@ class VivaHelpDeskBubble extends StatefulWidget {
   // Custom attributes
   final String? tenantKey;
   final String? pushToken;
-  final String? customAttributesJson; // JSON string, e.g. '{"key": "value"}'
 
   // Settings
   final bool isDark;
@@ -1943,13 +1932,6 @@ class _VivaHelpDeskBubbleState extends State<VivaHelpDeskBubble>
       final customAttrs = <String, dynamic>{};
       if (widget.tenantKey != null) customAttrs['tenant'] = widget.tenantKey;
       if (widget.pushToken != null) customAttrs['pushToken'] = widget.pushToken;
-      // Parse custom attributes from JSON string
-      if (widget.customAttributesJson != null && widget.customAttributesJson!.isNotEmpty) {
-        try {
-          final parsed = jsonDecode(widget.customAttributesJson!) as Map<String, dynamic>;
-          customAttrs.addAll(parsed);
-        } catch (_) {}
-      }
 
       await _apiService.createOrGetContact(
         identifier: widget.userIdentifier,
@@ -2039,7 +2021,6 @@ class _VivaHelpDeskBubbleState extends State<VivaHelpDeskBubble>
                   userAvatarUrl: widget.userAvatarUrl,
                   tenantKey: widget.tenantKey,
                   pushToken: widget.pushToken,
-                  customAttributesJson: widget.customAttributesJson,
                   isDark: widget.isDark,
                   locale: widget.locale,
                   primaryColor: widget.primaryColor,
