@@ -394,6 +394,52 @@ class ChatwootApiService {
   /// Widget API query params
   Map<String, dynamic> get _params => {'website_token': websiteToken};
 
+  /// Fetch auth token from widget HTML page (like web widget does)
+  Future<String?> fetchAuthToken() async {
+    try {
+      final response = await _dio.get(
+        '/widget',
+        queryParameters: {'website_token': websiteToken},
+        options: dio.Options(
+          headers: {'Accept': 'text/html'},
+          responseType: dio.ResponseType.plain,
+        ),
+      );
+
+      final html = response.data as String;
+
+      // Extract authToken from: window.chatwootWidgetDefaults = {..., authToken: "xxx"...}
+      // or from: "authToken":"xxx"
+      final authTokenMatch = RegExp(r'authToken["\s:]+["\']([^"\']+)["\']').firstMatch(html);
+      if (authTokenMatch != null) {
+        final token = authTokenMatch.group(1);
+        if (token != null && token.isNotEmpty) {
+          _dio.options.headers['X-Auth-Token'] = token;
+          _pubsubToken = token;
+          print('[Chatwoot] Auth token obtained from widget page');
+          return token;
+        }
+      }
+
+      // Also try: window.chatwootPubsubToken = "xxx"
+      final pubsubMatch = RegExp(r'chatwootPubsubToken\s*=\s*["\']([^"\']+)["\']').firstMatch(html);
+      if (pubsubMatch != null) {
+        final token = pubsubMatch.group(1);
+        if (token != null && token.isNotEmpty) {
+          _pubsubToken = token;
+          print('[Chatwoot] Pubsub token obtained from widget page');
+          // Note: pubsubToken might be different from authToken
+        }
+      }
+
+      print('[Chatwoot] Could not extract auth token from widget page');
+      return null;
+    } catch (e) {
+      print('[Chatwoot] Error fetching auth token: $e');
+      return null;
+    }
+  }
+
   /// Get inbox settings - not available in widget API
   InboxSettings getInboxSettings() {
     return InboxSettings();
@@ -409,6 +455,12 @@ class ChatwootApiService {
     Map<String, dynamic>? customAttributes,
   }) async {
     try {
+      // If no auth token, fetch it from widget page first
+      if (_dio.options.headers['X-Auth-Token'] == null) {
+        print('[Chatwoot] No auth token, fetching from widget page...');
+        await fetchAuthToken();
+      }
+
       // Try to get existing contact via Widget API
       try {
         final response = await _dio.get(
@@ -418,7 +470,9 @@ class ChatwootApiService {
         if (response.statusCode == 200 && response.data != null) {
           final contact = ChatContact.fromJson(response.data);
           _contactIdentifier = contact.identifier;
-          _pubsubToken = contact.pubsubToken;
+          if (contact.pubsubToken != null) {
+            _pubsubToken = contact.pubsubToken;
+          }
 
           // Update contact with new info if provided
           if (identifier != null || name != null || email != null) {
@@ -435,8 +489,9 @@ class ChatwootApiService {
 
           return contact;
         }
-      } catch (_) {
-        // Contact doesn't exist yet
+      } catch (e) {
+        print('[Chatwoot] Get contact failed: $e');
+        // Contact doesn't exist yet or no auth
       }
 
       // Set user info (creates contact if needed)
@@ -456,11 +511,13 @@ class ChatwootApiService {
 
       final contact = ChatContact.fromJson(response.data);
       _contactIdentifier = contact.identifier;
-      _pubsubToken = contact.pubsubToken;
+      if (contact.pubsubToken != null) {
+        _pubsubToken = contact.pubsubToken;
+      }
 
       return contact;
     } catch (e) {
-      print('Error creating contact: $e');
+      print('[Chatwoot] Error creating contact: $e');
       rethrow;
     }
   }
