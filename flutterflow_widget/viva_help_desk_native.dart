@@ -28,7 +28,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' as dio;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
@@ -43,14 +43,15 @@ import 'package:uuid/uuid.dart';
 
 /// Russian localization for flutter_chat_ui
 class ChatL10nRu extends ChatL10n {
-  const ChatL10nRu({
-    super.attachmentButtonAccessibilityLabel = 'Отправить файл',
-    super.emptyChatPlaceholder = 'Сообщений пока нет',
-    super.fileButtonAccessibilityLabel = 'Файл',
-    super.inputPlaceholder = 'Введите сообщение...',
-    super.sendButtonAccessibilityLabel = 'Отправить',
-    super.unreadMessagesLabel = 'Непрочитанные сообщения',
-  });
+  const ChatL10nRu()
+      : super(
+          attachmentButtonAccessibilityLabel: 'Отправить файл',
+          emptyChatPlaceholder: 'Сообщений пока нет',
+          fileButtonAccessibilityLabel: 'Файл',
+          inputPlaceholder: 'Введите сообщение...',
+          sendButtonAccessibilityLabel: 'Отправить',
+          unreadMessagesLabel: 'Непрочитанные сообщения',
+        );
 }
 
 // ============================================================================
@@ -372,7 +373,7 @@ class AttachmentFile {
 class ChatwootApiService {
   final String baseUrl;
   final String websiteToken;
-  final Dio _dio;
+  final dio.Dio _dio;
 
   String? _contactIdentifier;
   String? _conversationId;
@@ -391,7 +392,7 @@ class ChatwootApiService {
   ChatwootApiService({
     required this.baseUrl,
     required this.websiteToken,
-  }) : _dio = Dio(BaseOptions(
+  }) : _dio = dio.Dio(dio.BaseOptions(
     baseUrl: baseUrl,
     headers: {'Content-Type': 'application/json'},
   ));
@@ -583,7 +584,7 @@ class ChatwootApiService {
     if (_contactIdentifier == null || _conversationId == null) return null;
 
     try {
-      final formData = FormData();
+      final formData = dio.FormData();
 
       if (content != null && content.isNotEmpty) {
         formData.fields.add(MapEntry('content', content));
@@ -592,10 +593,10 @@ class ChatwootApiService {
       for (final attachment in attachments) {
         formData.files.add(MapEntry(
           'attachments[]',
-          MultipartFile.fromBytes(
+          dio.MultipartFile.fromBytes(
             attachment.bytes,
             filename: attachment.filename,
-            contentType: DioMediaType.parse(attachment.mimeType),
+            contentType: dio.DioMediaType.parse(attachment.mimeType),
           ),
         ));
       }
@@ -603,7 +604,7 @@ class ChatwootApiService {
       final response = await _dio.post(
         '/public/api/v1/inboxes/$websiteToken/contacts/$_contactIdentifier/conversations/$_conversationId/messages',
         data: formData,
-        options: Options(
+        options: dio.Options(
           contentType: 'multipart/form-data',
         ),
       );
