@@ -45,10 +45,13 @@ import 'package:uuid/uuid.dart';
 class ChatL10nRu extends ChatL10n {
   const ChatL10nRu()
       : super(
+          and: 'и',
           attachmentButtonAccessibilityLabel: 'Отправить файл',
           emptyChatPlaceholder: 'Сообщений пока нет',
           fileButtonAccessibilityLabel: 'Файл',
           inputPlaceholder: 'Введите сообщение...',
+          isTyping: 'печатает...',
+          others: 'других',
           sendButtonAccessibilityLabel: 'Отправить',
           unreadMessagesLabel: 'Непрочитанные сообщения',
         );
