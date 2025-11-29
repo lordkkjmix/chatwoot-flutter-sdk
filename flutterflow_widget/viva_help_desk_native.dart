@@ -357,6 +357,7 @@ class AttachmentFile {
 class ChatwootApiService {
   final String baseUrl;
   final String websiteToken;
+  final String? authToken;
   final dio.Dio _dio;
 
   String? _contactIdentifier;
@@ -376,10 +377,19 @@ class ChatwootApiService {
   ChatwootApiService({
     required this.baseUrl,
     required this.websiteToken,
+    this.authToken,
   }) : _dio = dio.Dio(dio.BaseOptions(
     baseUrl: baseUrl,
-    headers: {'Content-Type': 'application/json'},
-  ));
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  )) {
+    // Add auth token to all requests if provided
+    if (authToken != null && authToken!.isNotEmpty) {
+      _dio.options.headers['X-Auth-Token'] = authToken;
+      _pubsubToken = authToken; // Use for WebSocket too
+    }
+  }
 
   /// Widget API query params
   Map<String, dynamic> get _params => {'website_token': websiteToken};
@@ -730,6 +740,8 @@ class VivaHelpDeskNative extends StatefulWidget {
     this.height,
     required this.websiteToken,
     required this.baseUrl,
+    // Auth
+    this.authToken,
     // User data
     this.userIdentifier,
     this.identifierHash,
@@ -756,6 +768,9 @@ class VivaHelpDeskNative extends StatefulWidget {
   final double? height;
   final String websiteToken;
   final String baseUrl;
+
+  // Auth - JWT token for X-Auth-Token header
+  final String? authToken;
 
   // User
   final String? userIdentifier;
@@ -819,6 +834,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     _apiService = ChatwootApiService(
       baseUrl: widget.baseUrl,
       websiteToken: widget.websiteToken,
+      authToken: widget.authToken,
     );
     // Create user for flutter_chat_ui
     _user = types.User(
@@ -1851,6 +1867,8 @@ class VivaHelpDeskBubble extends StatefulWidget {
     super.key,
     required this.websiteToken,
     required this.baseUrl,
+    // Auth
+    this.authToken,
     // User data
     this.userIdentifier,
     this.identifierHash,
@@ -1874,6 +1892,9 @@ class VivaHelpDeskBubble extends StatefulWidget {
 
   final String websiteToken;
   final String baseUrl;
+
+  // Auth - JWT token for X-Auth-Token header
+  final String? authToken;
 
   // User
   final String? userIdentifier;
@@ -1930,6 +1951,7 @@ class _VivaHelpDeskBubbleState extends State<VivaHelpDeskBubble>
     _apiService = ChatwootApiService(
       baseUrl: widget.baseUrl,
       websiteToken: widget.websiteToken,
+      authToken: widget.authToken,
     );
 
     _initService();
