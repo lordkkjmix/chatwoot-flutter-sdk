@@ -379,7 +379,11 @@ class ChatwootApiService {
   }) : _dio = dio.Dio(dio.BaseOptions(
     baseUrl: baseUrl,
     headers: {'Content-Type': 'application/json'},
-  ));
+  )) {
+    // Debug: Log configuration
+    print('[Chatwoot] baseUrl: $baseUrl');
+    print('[Chatwoot] websiteToken: $websiteToken');
+  }
 
   /// Public API base path for inbox
   String get _inboxPath => '/public/api/v1/inboxes/$websiteToken';
@@ -399,19 +403,26 @@ class ChatwootApiService {
     Map<String, dynamic>? customAttributes,
   }) async {
     try {
-      // Try to get saved contact first
       final prefs = await SharedPreferences.getInstance();
+
+      // Clear old saved contact to force fresh creation for debugging
+      // await prefs.remove('chatwoot_contact_$websiteToken');
+
       final savedContactId = prefs.getString('chatwoot_contact_$websiteToken');
+      print('[Chatwoot] Saved contact ID: $savedContactId');
 
       if (savedContactId != null) {
         try {
-          final response = await _dio.get('$_inboxPath/contacts/$savedContactId');
+          final url = '$_inboxPath/contacts/$savedContactId';
+          print('[Chatwoot] GET $url');
+          final response = await _dio.get(url);
+          print('[Chatwoot] Response: ${response.statusCode}');
+
           if (response.statusCode == 200) {
             _contactIdentifier = savedContactId;
             final contact = ChatContact.fromJson(response.data);
             _pubsubToken = contact.pubsubToken;
 
-            // Update contact info if needed
             if (name != null || email != null || phoneNumber != null) {
               await updateContact(
                 name: name,
@@ -424,35 +435,40 @@ class ChatwootApiService {
 
             return contact;
           }
-        } catch (_) {
-          // Saved contact not found, create new
+        } catch (e) {
+          print('[Chatwoot] Failed to get saved contact: $e');
         }
       }
 
       // Create new contact
-      final response = await _dio.post(
-        '$_inboxPath/contacts',
-        data: {
-          if (identifier != null) 'identifier': identifier,
-          if (identifierHash != null) 'identifier_hash': identifierHash,
-          if (name != null) 'name': name,
-          if (email != null) 'email': email,
-          if (phoneNumber != null) 'phone_number': phoneNumber,
-          if (avatarUrl != null) 'avatar_url': avatarUrl,
-          if (customAttributes != null) 'custom_attributes': customAttributes,
-        },
-      );
+      final url = '$_inboxPath/contacts';
+      final data = {
+        if (identifier != null) 'identifier': identifier,
+        if (identifierHash != null) 'identifier_hash': identifierHash,
+        if (name != null) 'name': name,
+        if (email != null) 'email': email,
+        if (phoneNumber != null) 'phone_number': phoneNumber,
+        if (avatarUrl != null) 'avatar_url': avatarUrl,
+        if (customAttributes != null) 'custom_attributes': customAttributes,
+      };
+
+      print('[Chatwoot] POST $url');
+      print('[Chatwoot] Data: $data');
+      print('[Chatwoot] Full URL: $baseUrl$url');
+
+      final response = await _dio.post(url, data: data);
+      print('[Chatwoot] Response: ${response.statusCode} - ${response.data}');
 
       final contact = ChatContact.fromJson(response.data);
       _contactIdentifier = contact.identifier;
       _pubsubToken = contact.pubsubToken;
 
-      // Save contact identifier
       await prefs.setString('chatwoot_contact_$websiteToken', contact.identifier);
+      print('[Chatwoot] Contact created: ${contact.identifier}');
 
       return contact;
     } catch (e) {
-      print('Error creating contact: $e');
+      print('[Chatwoot] Error creating contact: $e');
       rethrow;
     }
   }
