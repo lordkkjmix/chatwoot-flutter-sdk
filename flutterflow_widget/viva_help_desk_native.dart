@@ -396,34 +396,28 @@ class ChatwootApiService {
 
       final html = response.data as String;
 
-      // Extract authToken from: window.chatwootWidgetDefaults = {..., authToken: "xxx"...}
-      // or from: "authToken":"xxx"
-      final authTokenMatch = RegExp(r'authToken["\s:]+["\']([^"\']+)["\']').firstMatch(html);
-      if (authTokenMatch != null) {
-        final token = authTokenMatch.group(1);
+      // Extract authToken from: "authToken":"xxx"
+      var match = RegExp('authToken":"([^"]+)"').firstMatch(html);
+      if (match != null) {
+        final token = match.group(1);
         if (token != null && token.isNotEmpty) {
           _dio.options.headers['X-Auth-Token'] = token;
           _pubsubToken = token;
-          print('[Chatwoot] Auth token obtained from widget page');
           return token;
         }
       }
 
-      // Also try: window.chatwootPubsubToken = "xxx"
-      final pubsubMatch = RegExp(r'chatwootPubsubToken\s*=\s*["\']([^"\']+)["\']').firstMatch(html);
-      if (pubsubMatch != null) {
-        final token = pubsubMatch.group(1);
+      // Try: chatwootPubsubToken = "xxx"
+      match = RegExp('chatwootPubsubToken = "([^"]+)"').firstMatch(html);
+      if (match != null) {
+        final token = match.group(1);
         if (token != null && token.isNotEmpty) {
           _pubsubToken = token;
-          print('[Chatwoot] Pubsub token obtained from widget page');
-          // Note: pubsubToken might be different from authToken
         }
       }
 
-      print('[Chatwoot] Could not extract auth token from widget page');
       return null;
     } catch (e) {
-      print('[Chatwoot] Error fetching auth token: $e');
       return null;
     }
   }
