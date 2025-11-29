@@ -37,25 +37,6 @@ import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
 
-// ============================================================================
-// LOCALIZATION
-// ============================================================================
-
-/// Russian localization for flutter_chat_ui
-class ChatL10nRu extends ChatL10n {
-  const ChatL10nRu()
-      : super(
-          and: 'и',
-          attachmentButtonAccessibilityLabel: 'Отправить файл',
-          emptyChatPlaceholder: 'Сообщений пока нет',
-          fileButtonAccessibilityLabel: 'Файл',
-          inputPlaceholder: 'Введите сообщение...',
-          isTyping: 'печатает...',
-          others: 'других',
-          sendButtonAccessibilityLabel: 'Отправить',
-          unreadMessagesLabel: 'Непрочитанные сообщения',
-        );
-}
 
 // ============================================================================
 // THEME
@@ -1270,9 +1251,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
             showUserAvatars: true,
             showUserNames: true,
             dateHeaderThreshold: 86400000, // 24 hours in ms
-            l10n: widget.locale == 'ru'
-                ? const ChatL10nRu()
-                : const ChatL10nEn(),
+            l10n: const ChatL10nEn(),
             emptyState: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
