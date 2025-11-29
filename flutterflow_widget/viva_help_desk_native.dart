@@ -3,6 +3,8 @@
 // DEPENDENCIES (add to pubspec.yaml):
 //   dio: ^5.7.0
 //   web_socket_channel: ^3.0.1
+//   image_picker: ^1.0.7
+//   record: ^5.1.0 (optional, for audio recording)
 //   shared_preferences: (already included in FlutterFlow)
 //   intl: (already included in FlutterFlow)
 //
@@ -22,10 +24,12 @@ import 'package:flutter/material.dart';
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 
 // ============================================================================
 // THEME
@@ -241,6 +245,53 @@ class WorkingHour {
   }
 }
 
+/// File attachment to send with message
+class AttachmentFile {
+  final Uint8List bytes;
+  final String filename;
+  final String mimeType;
+
+  AttachmentFile({
+    required this.bytes,
+    required this.filename,
+    required this.mimeType,
+  });
+
+  /// Create from XFile (image_picker result)
+  static Future<AttachmentFile> fromXFile(XFile file) async {
+    final bytes = await file.readAsBytes();
+    final mimeType = file.mimeType ?? _guessMimeType(file.name);
+    return AttachmentFile(
+      bytes: bytes,
+      filename: file.name,
+      mimeType: mimeType,
+    );
+  }
+
+  static String _guessMimeType(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'ogg':
+        return 'audio/ogg';
+      case 'mp4':
+        return 'video/mp4';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+}
+
 // ============================================================================
 // API SERVICE
 // ============================================================================
@@ -445,6 +496,48 @@ class ChatwootApiService {
       return ChatMessage.fromJson(response.data);
     } catch (e) {
       print('Error sending message: $e');
+      return null;
+    }
+  }
+
+  /// Send message with file attachment(s)
+  /// Supported types: image/png, image/jpeg, image/gif, audio/mpeg, audio/ogg, video/mp4, application/pdf
+  /// Max size: 40MB
+  Future<ChatMessage?> sendMessageWithAttachment({
+    String? content,
+    required List<AttachmentFile> attachments,
+  }) async {
+    if (_contactIdentifier == null || _conversationId == null) return null;
+
+    try {
+      final formData = FormData();
+
+      if (content != null && content.isNotEmpty) {
+        formData.fields.add(MapEntry('content', content));
+      }
+
+      for (final attachment in attachments) {
+        formData.files.add(MapEntry(
+          'attachments[]',
+          MultipartFile.fromBytes(
+            attachment.bytes,
+            filename: attachment.filename,
+            contentType: DioMediaType.parse(attachment.mimeType),
+          ),
+        ));
+      }
+
+      final response = await _dio.post(
+        '/public/api/v1/inboxes/$websiteToken/contacts/$_contactIdentifier/conversations/$_conversationId/messages',
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
+
+      return ChatMessage.fromJson(response.data);
+    } catch (e) {
+      print('Error sending attachment: $e');
       return null;
     }
   }
@@ -1155,45 +1248,110 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   }
 
   Widget _buildCSATWidget(ChatMessage message) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _theme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _theme.borderColor),
+    return _CSATRatingWidget(
+      messageId: message.id,
+      apiService: _apiService,
+      theme: _theme,
+      locale: widget.locale,
+      primaryColor: widget.primaryColor,
+    );
+  }
+
+  Future<void> _pickAndSendImage() async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      setState(() => _isSending = true);
+
+      final attachment = await AttachmentFile.fromXFile(pickedFile);
+      final message = await _apiService.sendMessageWithAttachment(
+        attachments: [attachment],
+      );
+
+      if (message != null && mounted) {
+        setState(() {
+          if (!_messages.any((m) => m.id == message.id)) {
+            _messages.add(message);
+          }
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  void _showAttachmentOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _theme.backgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        children: [
-          Text(
-            widget.locale == 'ru'
-                ? 'Как вы оцениваете наш сервис?'
-                : 'How would you rate our service?',
-            style: TextStyle(
-              color: _theme.textColor,
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(5, (index) {
-              final rating = index + 1;
-              return GestureDetector(
-                onTap: () => _apiService.submitCSAT(message.id, rating),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    Icons.star_border,
-                    size: 36,
-                    color: _theme.primaryColor,
-                  ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _theme.primaryColor.withOpacity(0.1),
+                  child: Icon(Icons.photo, color: _theme.primaryColor),
                 ),
-              );
-            }),
+                title: Text(
+                  widget.locale == 'ru' ? 'Галерея' : 'Gallery',
+                  style: TextStyle(color: _theme.textColor),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickAndSendImage();
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _theme.primaryColor.withOpacity(0.1),
+                  child: Icon(Icons.camera_alt, color: _theme.primaryColor),
+                ),
+                title: Text(
+                  widget.locale == 'ru' ? 'Камера' : 'Camera',
+                  style: TextStyle(color: _theme.textColor),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final picker = ImagePicker();
+                  final photo = await picker.pickImage(source: ImageSource.camera);
+                  if (photo != null) {
+                    setState(() => _isSending = true);
+                    final attachment = await AttachmentFile.fromXFile(photo);
+                    final message = await _apiService.sendMessageWithAttachment(
+                      attachments: [attachment],
+                    );
+                    if (message != null && mounted) {
+                      setState(() {
+                        if (!_messages.any((m) => m.id == message.id)) {
+                          _messages.add(message);
+                        }
+                        _isSending = false;
+                      });
+                      _scrollToBottom();
+                    }
+                  }
+                },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1211,6 +1369,17 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
         top: false,
         child: Row(
           children: [
+            // Attachment button
+            IconButton(
+              onPressed: _isSending ? null : _showAttachmentOptions,
+              icon: Icon(
+                Icons.attach_file,
+                color: _theme.secondaryTextColor,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
+            const SizedBox(width: 4),
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -1300,6 +1469,197 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// CSAT RATING WIDGET
+// ============================================================================
+
+class _CSATRatingWidget extends StatefulWidget {
+  const _CSATRatingWidget({
+    required this.messageId,
+    required this.apiService,
+    required this.theme,
+    required this.locale,
+    this.primaryColor,
+  });
+
+  final int messageId;
+  final ChatwootApiService apiService;
+  final ChatTheme theme;
+  final String locale;
+  final Color? primaryColor;
+
+  @override
+  State<_CSATRatingWidget> createState() => _CSATRatingWidgetState();
+}
+
+class _CSATRatingWidgetState extends State<_CSATRatingWidget> {
+  int _selectedRating = 0;
+  bool _submitted = false;
+  bool _submitting = false;
+  final _feedbackController = TextEditingController();
+
+  @override
+  void dispose() {
+    _feedbackController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitRating() async {
+    if (_selectedRating == 0 || _submitting) return;
+
+    setState(() => _submitting = true);
+
+    await widget.apiService.submitCSAT(
+      widget.messageId,
+      _selectedRating,
+      feedback: _feedbackController.text.isNotEmpty
+          ? _feedbackController.text
+          : null,
+    );
+
+    if (mounted) {
+      setState(() {
+        _submitted = true;
+        _submitting = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = widget.primaryColor ?? widget.theme.primaryColor;
+
+    if (_submitted) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: widget.theme.surfaceColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: widget.theme.borderColor),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              widget.locale == 'ru'
+                  ? 'Спасибо за вашу оценку!'
+                  : 'Thank you for your feedback!',
+              style: TextStyle(
+                color: widget.theme.textColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: widget.theme.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: widget.theme.borderColor),
+      ),
+      child: Column(
+        children: [
+          Text(
+            widget.locale == 'ru'
+                ? 'Как вы оцениваете наш сервис?'
+                : 'How would you rate our service?',
+            style: TextStyle(
+              color: widget.theme.textColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Star rating
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(5, (index) {
+              final rating = index + 1;
+              final isSelected = rating <= _selectedRating;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedRating = rating),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(
+                    isSelected ? Icons.star : Icons.star_border,
+                    size: 40,
+                    color: isSelected ? Colors.amber : widget.theme.secondaryTextColor,
+                  ),
+                ),
+              );
+            }),
+          ),
+          if (_selectedRating > 0) ...[
+            const SizedBox(height: 16),
+            // Feedback text field
+            TextField(
+              controller: _feedbackController,
+              style: TextStyle(color: widget.theme.textColor),
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: widget.locale == 'ru'
+                    ? 'Оставьте комментарий (необязательно)'
+                    : 'Leave a comment (optional)',
+                hintStyle: TextStyle(color: widget.theme.secondaryTextColor),
+                filled: true,
+                fillColor: widget.theme.inputBackgroundColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: widget.theme.borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: widget.theme.borderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: primaryColor),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Submit button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _submitting ? null : _submitRating,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _submitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        widget.locale == 'ru' ? 'Отправить' : 'Submit',
+                      ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
