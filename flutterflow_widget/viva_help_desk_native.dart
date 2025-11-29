@@ -153,6 +153,94 @@ class ChatContact {
   }
 }
 
+/// Inbox settings from Chatwoot server
+class InboxSettings {
+  final String? name;
+  final String? timezone;
+  final bool workingHoursEnabled;
+  final bool csatSurveyEnabled;
+  final bool greetingEnabled;
+  final String? greetingMessage;
+  final List<WorkingHour> workingHours;
+
+  InboxSettings({
+    this.name,
+    this.timezone,
+    this.workingHoursEnabled = false,
+    this.csatSurveyEnabled = false,
+    this.greetingEnabled = false,
+    this.greetingMessage,
+    this.workingHours = const [],
+  });
+
+  factory InboxSettings.fromJson(Map<String, dynamic> json) {
+    final hoursJson = json['working_hours'] as List<dynamic>? ?? [];
+    return InboxSettings(
+      name: json['name'],
+      timezone: json['timezone'],
+      workingHoursEnabled: json['working_hours_enabled'] ?? false,
+      csatSurveyEnabled: json['csat_survey_enabled'] ?? false,
+      greetingEnabled: json['greeting_enabled'] ?? false,
+      greetingMessage: json['greeting_message'],
+      workingHours: hoursJson.map((h) => WorkingHour.fromJson(h)).toList(),
+    );
+  }
+
+  /// Check if current time is within working hours
+  bool isWithinWorkingHours() {
+    if (!workingHoursEnabled || workingHours.isEmpty) return true;
+
+    final now = DateTime.now();
+    // Convert to inbox timezone if specified
+    final currentDay = now.weekday % 7; // 0 = Sunday, 1 = Monday, etc.
+
+    final todayHours = workingHours.where((h) => h.dayOfWeek == currentDay).toList();
+    if (todayHours.isEmpty) return true;
+
+    final hours = todayHours.first;
+    if (hours.closedAllDay) return false;
+    if (hours.openAllDay) return true;
+
+    final nowMinutes = now.hour * 60 + now.minute;
+    final openMinutes = hours.openHour * 60 + hours.openMinutes;
+    final closeMinutes = hours.closeHour * 60 + hours.closeMinutes;
+
+    return nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
+  }
+}
+
+class WorkingHour {
+  final int dayOfWeek;
+  final bool closedAllDay;
+  final bool openAllDay;
+  final int openHour;
+  final int openMinutes;
+  final int closeHour;
+  final int closeMinutes;
+
+  WorkingHour({
+    required this.dayOfWeek,
+    this.closedAllDay = false,
+    this.openAllDay = false,
+    this.openHour = 9,
+    this.openMinutes = 0,
+    this.closeHour = 17,
+    this.closeMinutes = 0,
+  });
+
+  factory WorkingHour.fromJson(Map<String, dynamic> json) {
+    return WorkingHour(
+      dayOfWeek: json['day_of_week'] ?? 0,
+      closedAllDay: json['closed_all_day'] ?? false,
+      openAllDay: json['open_all_day'] ?? false,
+      openHour: json['open_hour'] ?? 9,
+      openMinutes: json['open_minutes'] ?? 0,
+      closeHour: json['close_hour'] ?? 17,
+      closeMinutes: json['close_minutes'] ?? 0,
+    );
+  }
+}
+
 // ============================================================================
 // API SERVICE
 // ============================================================================
@@ -183,6 +271,21 @@ class ChatwootApiService {
     baseUrl: baseUrl,
     headers: {'Content-Type': 'application/json'},
   ));
+
+  /// Fetch inbox settings from public API
+  Future<InboxSettings> getInboxSettings() async {
+    try {
+      final response = await _dio.get(
+        '/public/api/v1/inboxes/$websiteToken',
+      );
+      if (response.statusCode == 200) {
+        return InboxSettings.fromJson(response.data);
+      }
+    } catch (e) {
+      print('Error fetching inbox settings: $e');
+    }
+    return InboxSettings();
+  }
 
   Future<ChatContact> createOrGetContact({
     String? identifier,
@@ -482,11 +585,7 @@ class VivaHelpDeskNative extends StatefulWidget {
     // UI
     this.primaryColor,
     this.showHeader = true,
-    this.headerTitle = 'Чат поддержки',
-    // Working hours
-    this.workingHoursStart,
-    this.workingHoursEnd,
-    this.workingHoursMessage,
+    this.headerTitle,
   });
 
   final double? width;
@@ -517,12 +616,7 @@ class VivaHelpDeskNative extends StatefulWidget {
   // UI
   final Color? primaryColor;
   final bool showHeader;
-  final String headerTitle;
-
-  // Working hours
-  final String? workingHoursStart;
-  final String? workingHoursEnd;
-  final String? workingHoursMessage;
+  final String? headerTitle; // If null, uses inbox name from server
 
   @override
   State<VivaHelpDeskNative> createState() => _VivaHelpDeskNativeState();
@@ -544,6 +638,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   String? _error;
   bool _conversationResolved = false;
   int _unreadCount = 0;
+  InboxSettings? _inboxSettings; // Settings from Chatwoot server
 
   StreamSubscription? _messageSubscription;
   StreamSubscription? _typingSubscription;
@@ -567,6 +662,9 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
         _isLoading = true;
         _error = null;
       });
+
+      // Fetch inbox settings from server (working hours, CSAT, etc.)
+      _inboxSettings = await _apiService.getInboxSettings();
 
       // Build custom attributes
       final customAttrs = <String, dynamic>{};
@@ -705,31 +803,9 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     });
   }
 
+  /// Check if current time is within working hours (from server settings)
   bool get _isWithinWorkingHours {
-    if (widget.workingHoursStart == null || widget.workingHoursEnd == null) {
-      return true;
-    }
-
-    final now = TimeOfDay.now();
-    final start = _parseTime(widget.workingHoursStart!);
-    final end = _parseTime(widget.workingHoursEnd!);
-
-    if (start == null || end == null) return true;
-
-    final nowMinutes = now.hour * 60 + now.minute;
-    final startMinutes = start.hour * 60 + start.minute;
-    final endMinutes = end.hour * 60 + end.minute;
-
-    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-  }
-
-  TimeOfDay? _parseTime(String time) {
-    final parts = time.split(':');
-    if (parts.length != 2) return null;
-    final hour = int.tryParse(parts[0]);
-    final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null) return null;
-    return TimeOfDay(hour: hour, minute: minute);
+    return _inboxSettings?.isWithinWorkingHours() ?? true;
   }
 
   @override
@@ -804,7 +880,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.headerTitle,
+                  widget.headerTitle ?? _inboxSettings?.name ?? (widget.locale == 'ru' ? 'Чат поддержки' : 'Support Chat'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -854,20 +930,22 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   }
 
   Widget _buildWorkingHoursNotice() {
+    // Default message if not set on server
+    final defaultMessage = widget.locale == 'ru'
+        ? 'Сейчас нерабочее время. Мы ответим в рабочие часы.'
+        : 'Outside working hours. We will reply during business hours.';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.amber.withOpacity(0.2),
       child: Row(
         children: [
-          const Icon(Icons.schedule, size: 20, color: Colors.amber),
+          Icon(Icons.schedule, size: 20, color: Colors.amber[700]),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              widget.workingHoursMessage ??
-                  (widget.locale == 'ru'
-                      ? 'Сейчас нерабочее время. Мы ответим в рабочие часы.'
-                      : 'Outside working hours. We will reply during business hours.'),
+              defaultMessage,
               style: TextStyle(
                 color: _theme.textColor,
                 fontSize: 13,
@@ -1256,11 +1334,7 @@ class VivaHelpDeskBubble extends StatefulWidget {
     // UI
     this.primaryColor,
     this.bubbleSize = 60.0,
-    this.headerTitle = 'Чат поддержки',
-    // Working hours
-    this.workingHoursStart,
-    this.workingHoursEnd,
-    this.workingHoursMessage,
+    this.headerTitle, // If null, uses inbox name from server
   });
 
   final String websiteToken;
@@ -1288,12 +1362,7 @@ class VivaHelpDeskBubble extends StatefulWidget {
   // UI
   final Color? primaryColor;
   final double bubbleSize;
-  final String headerTitle;
-
-  // Working hours
-  final String? workingHoursStart;
-  final String? workingHoursEnd;
-  final String? workingHoursMessage;
+  final String? headerTitle; // If null, uses inbox name from server
 
   @override
   State<VivaHelpDeskBubble> createState() => _VivaHelpDeskBubbleState();
@@ -1433,9 +1502,6 @@ class _VivaHelpDeskBubbleState extends State<VivaHelpDeskBubble>
                   locale: widget.locale,
                   primaryColor: widget.primaryColor,
                   headerTitle: widget.headerTitle,
-                  workingHoursStart: widget.workingHoursStart,
-                  workingHoursEnd: widget.workingHoursEnd,
-                  workingHoursMessage: widget.workingHoursMessage,
                 ),
               ),
             ],
