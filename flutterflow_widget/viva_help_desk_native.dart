@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 //   flutter_chat_ui: ^2.9.1
 //   flutter_chat_types: ^3.6.2
 //   uuid: ^4.5.1
-//   shared_preferences: (already included in FlutterFlow)
 //   intl: (already included in FlutterFlow)
 
 import 'dart:async';
@@ -18,7 +17,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart' as dio;
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
