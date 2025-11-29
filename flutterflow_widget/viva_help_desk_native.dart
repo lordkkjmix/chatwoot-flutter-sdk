@@ -381,18 +381,11 @@ class ChatwootApiService {
     headers: {'Content-Type': 'application/json'},
   ));
 
-  /// Fetch inbox settings from public API
-  Future<InboxSettings> getInboxSettings() async {
-    try {
-      final response = await _dio.get(
-        '/public/api/v1/inboxes/$websiteToken',
-      );
-      if (response.statusCode == 200) {
-        return InboxSettings.fromJson(response.data);
-      }
-    } catch (e) {
-      print('Error fetching inbox settings: $e');
-    }
+  /// Get inbox settings (public API doesn't expose this endpoint)
+  /// Settings like working hours and CSAT are determined from message types
+  InboxSettings getInboxSettings() {
+    // Public API doesn't have inbox settings endpoint
+    // CSAT is detected from message content_type == 'input_csat'
     return InboxSettings();
   }
 
@@ -822,8 +815,8 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
         _error = null;
       });
 
-      // Fetch inbox settings from server (working hours, CSAT, etc.)
-      _inboxSettings = await _apiService.getInboxSettings();
+      // Get inbox settings (public API doesn't expose this, returns defaults)
+      _inboxSettings = _apiService.getInboxSettings();
 
       // Build custom attributes
       final customAttrs = <String, dynamic>{};
