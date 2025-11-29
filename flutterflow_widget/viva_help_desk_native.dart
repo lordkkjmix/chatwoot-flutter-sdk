@@ -4,6 +4,9 @@
 //   dio: ^5.7.0
 //   web_socket_channel: ^3.0.1
 //   image_picker: ^1.0.7
+//   flutter_chat_ui: ^1.6.15
+//   flutter_chat_types: ^3.6.2
+//   uuid: ^4.5.1
 //   record: ^5.1.0 (optional, for audio recording)
 //   shared_preferences: (already included in FlutterFlow)
 //   intl: (already included in FlutterFlow)
@@ -30,6 +33,25 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:uuid/uuid.dart';
+
+// ============================================================================
+// LOCALIZATION
+// ============================================================================
+
+/// Russian localization for flutter_chat_ui
+class ChatL10nRu extends ChatL10n {
+  const ChatL10nRu({
+    super.attachmentButtonAccessibilityLabel = 'Отправить файл',
+    super.emptyChatPlaceholder = 'Сообщений пока нет',
+    super.fileButtonAccessibilityLabel = 'Файл',
+    super.inputPlaceholder = 'Введите сообщение...',
+    super.sendButtonAccessibilityLabel = 'Отправить',
+    super.unreadMessagesLabel = 'Непрочитанные сообщения',
+  });
+}
 
 // ============================================================================
 // THEME
@@ -116,6 +138,57 @@ class ChatMessage {
   }
 
   bool get isCSAT => contentType == 'input_csat';
+
+  /// Convert to flutter_chat_types Message for flutter_chat_ui
+  types.Message toFlutterChatMessage(String currentUserId) {
+    final author = types.User(
+      id: isMine ? currentUserId : (senderName ?? 'agent'),
+      firstName: isMine ? null : senderName,
+      imageUrl: senderAvatar,
+    );
+
+    // Check for image attachments
+    if (attachments.isNotEmpty) {
+      final imageAttachment = attachments.firstWhere(
+        (a) => a.fileType == 'image',
+        orElse: () => ChatAttachment(),
+      );
+      if (imageAttachment.dataUrl != null) {
+        return types.ImageMessage(
+          id: id.toString(),
+          author: author,
+          createdAt: createdAt.millisecondsSinceEpoch,
+          name: 'image',
+          size: 0,
+          uri: imageAttachment.dataUrl!,
+        );
+      }
+
+      // Check for file attachments
+      final fileAttachment = attachments.firstWhere(
+        (a) => a.fileType == 'file',
+        orElse: () => ChatAttachment(),
+      );
+      if (fileAttachment.dataUrl != null) {
+        return types.FileMessage(
+          id: id.toString(),
+          author: author,
+          createdAt: createdAt.millisecondsSinceEpoch,
+          name: fileAttachment.dataUrl!.split('/').last,
+          size: 0,
+          uri: fileAttachment.dataUrl!,
+        );
+      }
+    }
+
+    // Default to text message
+    return types.TextMessage(
+      id: id.toString(),
+      author: author,
+      createdAt: createdAt.millisecondsSinceEpoch,
+      text: content ?? '',
+    );
+  }
 }
 
 class ChatAttachment {
@@ -738,6 +811,10 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   StreamSubscription? _onlineSubscription;
   Timer? _typingTimer;
 
+  // flutter_chat_ui user
+  late types.User _user;
+  final _uuid = const Uuid();
+
   @override
   void initState() {
     super.initState();
@@ -745,6 +822,12 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     _apiService = ChatwootApiService(
       baseUrl: widget.baseUrl,
       websiteToken: widget.websiteToken,
+    );
+    // Create user for flutter_chat_ui
+    _user = types.User(
+      id: widget.userIdentifier ?? _uuid.v4(),
+      firstName: widget.userName,
+      imageUrl: widget.userAvatarUrl,
     );
     _initChat();
   }
@@ -936,7 +1019,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
           if (widget.showHeader) _buildHeader(),
           if (!_isWithinWorkingHours) _buildWorkingHoursNotice(),
           Expanded(child: _buildContent()),
-          if (!_conversationResolved) _buildInputArea(),
+          // flutter_chat_ui Chat widget has built-in input, only show new conversation button when resolved
           if (_conversationResolved) _buildNewConversationButton(),
         ],
       ),
@@ -1050,6 +1133,88 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     );
   }
 
+  /// Convert ChatMessage list to flutter_chat_types Message list
+  List<types.Message> _convertMessages() {
+    // Filter out CSAT messages (handled separately) and reverse for flutter_chat_ui (newest first)
+    return _messages
+        .where((m) => !m.isCSAT)
+        .map((m) => m.toFlutterChatMessage(_user.id))
+        .toList()
+        .reversed
+        .toList();
+  }
+
+  /// Build chat theme for flutter_chat_ui
+  DefaultChatTheme _buildChatTheme() {
+    final primaryColor = widget.primaryColor ?? _theme.primaryColor;
+
+    return DefaultChatTheme(
+      backgroundColor: _theme.backgroundColor,
+      primaryColor: primaryColor,
+      secondaryColor: _theme.bubbleTheirColor,
+      inputBackgroundColor: _theme.inputBackgroundColor,
+      inputTextColor: _theme.textColor,
+      inputBorderRadius: BorderRadius.circular(24),
+      inputPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      inputContainerDecoration: BoxDecoration(
+        color: _theme.backgroundColor,
+        border: Border(top: BorderSide(color: _theme.borderColor)),
+      ),
+      sentMessageBodyTextStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+      ),
+      receivedMessageBodyTextStyle: TextStyle(
+        color: _theme.textColor,
+        fontSize: 15,
+      ),
+      dateDividerTextStyle: TextStyle(
+        color: _theme.secondaryTextColor,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      messageBorderRadius: 16,
+      messageInsetsHorizontal: 14,
+      messageInsetsVertical: 10,
+      attachmentButtonIcon: Icon(
+        Icons.attach_file,
+        color: _theme.secondaryTextColor,
+      ),
+      sendButtonIcon: Icon(Icons.send, color: primaryColor),
+      inputTextCursorColor: primaryColor,
+      emptyChatPlaceholderTextStyle: TextStyle(
+        color: _theme.secondaryTextColor,
+        fontSize: 16,
+      ),
+    );
+  }
+
+  /// Handle message send from flutter_chat_ui
+  void _handleSendPressed(types.PartialText message) async {
+    if (message.text.trim().isEmpty || _isSending) return;
+
+    setState(() => _isSending = true);
+
+    final response = await _apiService.sendMessage(message.text);
+
+    if (response != null && mounted) {
+      setState(() {
+        if (!_messages.any((m) => m.id == response.id)) {
+          _messages.add(response);
+        }
+        _isSending = false;
+        _conversationResolved = false;
+      });
+    } else {
+      setState(() => _isSending = false);
+    }
+  }
+
+  /// Handle attachment button press
+  void _handleAttachmentPressed() {
+    _showAttachmentOptions();
+  }
+
   Widget _buildContent() {
     if (_isLoading) {
       return Center(
@@ -1087,50 +1252,55 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
       );
     }
 
-    if (_messages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 64,
-              color: _theme.secondaryTextColor.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              widget.locale == 'ru'
-                  ? 'Начните диалог с нами!'
-                  : 'Start a conversation with us!',
-              style: TextStyle(
-                color: _theme.secondaryTextColor,
-                fontSize: 16,
+    // Check for CSAT message at the end
+    final csatMessage = _messages.isNotEmpty && _messages.last.isCSAT
+        ? _messages.last
+        : null;
+
+    return Column(
+      children: [
+        Expanded(
+          child: Chat(
+            messages: _convertMessages(),
+            onSendPressed: _handleSendPressed,
+            onAttachmentPressed: _handleAttachmentPressed,
+            user: _user,
+            theme: _buildChatTheme(),
+            showUserAvatars: true,
+            showUserNames: true,
+            dateHeaderThreshold: 86400000, // 24 hours in ms
+            l10n: widget.locale == 'ru'
+                ? const ChatL10nRu()
+                : const ChatL10nEn(),
+            emptyState: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    size: 64,
+                    color: _theme.secondaryTextColor.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    widget.locale == 'ru'
+                        ? 'Начните диалог с нами!'
+                        : 'Start a conversation with us!',
+                    style: TextStyle(
+                      color: _theme.secondaryTextColor,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+            // Hide built-in input if conversation is resolved
+            customBottomWidget: _conversationResolved ? const SizedBox.shrink() : null,
+          ),
         ),
-      );
-    }
-
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        final message = _messages[index];
-        final showDate = index == 0 ||
-            !_isSameDay(_messages[index - 1].createdAt, message.createdAt);
-
-        return Column(
-          children: [
-            if (showDate) _buildDateDivider(message.createdAt),
-            if (message.isCSAT)
-              _buildCSATWidget(message)
-            else
-              _buildMessageBubble(message),
-          ],
-        );
-      },
+        // Show CSAT widget if present
+        if (csatMessage != null) _buildCSATWidget(csatMessage),
+      ],
     );
   }
 
