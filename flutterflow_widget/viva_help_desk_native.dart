@@ -4,7 +4,7 @@
 //   dio: ^5.7.0
 //   web_socket_channel: ^3.0.1
 //   image_picker: ^1.0.7
-//   flutter_chat_ui: ^1.6.15
+//   flutter_chat_ui: ^2.9.1
 //   flutter_chat_types: ^3.6.2
 //   uuid: ^4.5.1
 //   record: ^5.1.0 (optional, for audio recording)
@@ -1251,7 +1251,19 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
             showUserAvatars: true,
             showUserNames: true,
             dateHeaderThreshold: 86400000, // 24 hours in ms
-            l10n: const ChatL10nEn(),
+            l10n: widget.locale == 'ru'
+                ? const ChatL10nEn(
+                    and: 'и',
+                    attachmentButtonAccessibilityLabel: 'Отправить файл',
+                    emptyChatPlaceholder: 'Сообщений пока нет',
+                    fileButtonAccessibilityLabel: 'Файл',
+                    inputPlaceholder: 'Сообщение',
+                    isTyping: 'печатает...',
+                    others: 'других',
+                    sendButtonAccessibilityLabel: 'Отправить',
+                    unreadMessagesLabel: 'Непрочитанные сообщения',
+                  )
+                : const ChatL10nEn(),
             emptyState: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
