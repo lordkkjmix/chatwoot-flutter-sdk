@@ -10,12 +10,13 @@ import 'package:flutter/material.dart';
 //   flutter_chat_ui: ^2.9.1
 //   flutter_chat_types: ^3.6.2
 //   uuid: ^4.5.1
-//   just_audio: ^0.9.40
 //   intl: (already included in FlutterFlow)
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:dio/dio.dart' as dio;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +24,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
-import 'package:just_audio/just_audio.dart' as just_audio;
 
 
 // ============================================================================
@@ -2270,16 +2270,13 @@ class _AudioMessageWidget extends StatefulWidget {
 }
 
 class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
-  just_audio.AudioPlayer? _player;
+  html.AudioElement? _audio;
   bool _isPlaying = false;
   bool _isLoading = false;
-  bool _isInitialized = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   double _playbackSpeed = 1.0;
-  StreamSubscription? _durationSub;
-  StreamSubscription? _positionSub;
-  StreamSubscription? _stateSub;
+  Timer? _positionTimer;
 
   final List<double> _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
@@ -2289,61 +2286,94 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
     _initPlayer();
   }
 
-  Future<void> _initPlayer() async {
-    _player = just_audio.AudioPlayer();
+  void _initPlayer() {
+    _audio = html.AudioElement(widget.url);
+    _audio!.preload = 'metadata';
 
-    _durationSub = _player!.durationStream.listen((d) {
-      if (mounted && d != null) setState(() => _duration = d);
-    });
-
-    _positionSub = _player!.positionStream.listen((p) {
-      if (mounted) setState(() => _position = p);
-    });
-
-    _stateSub = _player!.playerStateStream.listen((state) {
+    _audio!.onLoadedMetadata.listen((_) {
       if (mounted) {
         setState(() {
-          _isPlaying = state.playing;
-          _isLoading = state.processingState == just_audio.ProcessingState.loading ||
-                       state.processingState == just_audio.ProcessingState.buffering;
+          _duration = Duration(milliseconds: (_audio!.duration * 1000).round());
+          _isLoading = false;
+        });
+      }
+    });
 
-          // Reset position when completed
-          if (state.processingState == just_audio.ProcessingState.completed) {
-            _isPlaying = false;
-            _player?.seek(Duration.zero);
-            _player?.pause();
-          }
+    _audio!.onPlay.listen((_) {
+      if (mounted) setState(() => _isPlaying = true);
+      _startPositionTimer();
+    });
+
+    _audio!.onPause.listen((_) {
+      if (mounted) setState(() => _isPlaying = false);
+      _stopPositionTimer();
+    });
+
+    _audio!.onEnded.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+        _audio?.currentTime = 0;
+      }
+      _stopPositionTimer();
+    });
+
+    _audio!.onWaiting.listen((_) {
+      if (mounted) setState(() => _isLoading = true);
+    });
+
+    _audio!.onCanPlay.listen((_) {
+      if (mounted) setState(() => _isLoading = false);
+    });
+
+    _audio!.onError.listen((e) {
+      print('[Audio] Error: ${_audio?.error?.message}');
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  void _startPositionTimer() {
+    _positionTimer?.cancel();
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (mounted && _audio != null) {
+        setState(() {
+          _position = Duration(milliseconds: (_audio!.currentTime * 1000).round());
         });
       }
     });
   }
 
-  Future<void> _togglePlay() async {
-    if (_player == null || _isLoading) return;
+  void _stopPositionTimer() {
+    _positionTimer?.cancel();
+  }
 
-    try {
-      if (!_isInitialized) {
-        setState(() => _isLoading = true);
-        await _player!.setUrl(widget.url);
-        _isInitialized = true;
-      }
+  void _togglePlay() {
+    if (_audio == null) return;
 
-      if (_isPlaying) {
-        await _player!.pause();
-      } else {
-        await _player!.play();
-      }
-    } catch (e) {
-      print('[Audio] Error playing: $e');
-      setState(() => _isLoading = false);
+    if (_isPlaying) {
+      _audio!.pause();
+    } else {
+      setState(() => _isLoading = true);
+      _audio!.play();
     }
   }
 
-  Future<void> _changeSpeed() async {
+  void _changeSpeed() {
     final currentIndex = _speeds.indexOf(_playbackSpeed);
     final nextIndex = (currentIndex + 1) % _speeds.length;
     setState(() => _playbackSpeed = _speeds[nextIndex]);
-    await _player?.setSpeed(_playbackSpeed);
+    _audio?.playbackRate = _playbackSpeed;
+  }
+
+  void _seek(double value) {
+    if (_audio != null && _duration.inMilliseconds > 0) {
+      _audio!.currentTime = value * _duration.inSeconds;
+      setState(() {
+        _position = Duration(milliseconds: (value * _duration.inMilliseconds).round());
+      });
+    }
   }
 
   String _formatDuration(Duration d) {
@@ -2354,10 +2384,9 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
 
   @override
   void dispose() {
-    _durationSub?.cancel();
-    _positionSub?.cancel();
-    _stateSub?.cancel();
-    _player?.dispose();
+    _positionTimer?.cancel();
+    _audio?.pause();
+    _audio = null;
     super.dispose();
   }
 
@@ -2425,10 +2454,7 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
                     value: _duration.inMilliseconds > 0
                         ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
                         : 0.0,
-                    onChanged: (value) {
-                      final newPosition = Duration(milliseconds: (value * _duration.inMilliseconds).round());
-                      _player?.seek(newPosition);
-                    },
+                    onChanged: _seek,
                   ),
                 ),
                 // Duration text
