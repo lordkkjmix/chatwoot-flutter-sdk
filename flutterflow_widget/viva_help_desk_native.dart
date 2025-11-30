@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 //   flutter_chat_ui: ^2.9.1
 //   flutter_chat_types: ^3.6.2
 //   uuid: ^4.5.1
-//   audioplayers: ^6.1.0
+//   just_audio: ^0.9.40
 //   intl: (already included in FlutterFlow)
 
 import 'dart:async';
@@ -23,7 +23,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart' as just_audio;
 
 
 // ============================================================================
@@ -808,6 +808,7 @@ class ChatwootApiService {
 
       _wsSubscription = _wsChannel!.stream.listen((data) {
         try {
+          print('[Chatwoot] WebSocket incoming raw: $data');
           final decoded = jsonDecode(data);
           _handleWebSocketMessage(decoded);
         } catch (e) {
@@ -820,6 +821,14 @@ class ChatwootApiService {
         _wsSubscribed = false;
         _welcomeReceived = false;
         _subscribeRetryTimer?.cancel();
+      });
+
+      // Also try subscribing after a short delay in case welcome is missed
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!_wsSubscribed && !_welcomeReceived && _wsChannel != null) {
+          print('[Chatwoot] No welcome received, sending subscription anyway');
+          _sendSubscribeCommand();
+        }
       });
     } catch (e) {
       print('[Chatwoot] WebSocket connection error: $e');
@@ -1634,20 +1643,6 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
               }
               return const SizedBox.shrink();
             },
-            // Handle image tap to open full-screen viewer
-            onMessageTap: (context, message) {
-              if (message is types.ImageMessage) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => _FullScreenImageViewer(
-                      imageUrl: message.uri,
-                      theme: _theme,
-                    ),
-                  ),
-                );
-              }
-            },
             l10n: widget.locale == 'ru'
                 ? const ChatL10nEn(
                     and: 'и',
@@ -2244,75 +2239,80 @@ class _AudioMessageWidget extends StatefulWidget {
 }
 
 class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
-  late AudioPlayer _player;
+  just_audio.AudioPlayer? _player;
   bool _isPlaying = false;
   bool _isLoading = false;
+  bool _isInitialized = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   double _playbackSpeed = 1.0;
+  StreamSubscription? _durationSub;
+  StreamSubscription? _positionSub;
+  StreamSubscription? _stateSub;
 
   final List<double> _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
   @override
   void initState() {
     super.initState();
-    _player = AudioPlayer();
-    _setupPlayer();
+    _initPlayer();
   }
 
-  void _setupPlayer() {
-    _player.onDurationChanged.listen((d) {
-      if (mounted) setState(() => _duration = d);
+  Future<void> _initPlayer() async {
+    _player = just_audio.AudioPlayer();
+
+    _durationSub = _player!.durationStream.listen((d) {
+      if (mounted && d != null) setState(() => _duration = d);
     });
 
-    _player.onPositionChanged.listen((p) {
+    _positionSub = _player!.positionStream.listen((p) {
       if (mounted) setState(() => _position = p);
     });
 
-    _player.onPlayerStateChanged.listen((state) {
+    _stateSub = _player!.playerStateStream.listen((state) {
       if (mounted) {
         setState(() {
-          _isPlaying = state == PlayerState.playing;
-          _isLoading = false;
-        });
-      }
-    });
+          _isPlaying = state.playing;
+          _isLoading = state.processingState == just_audio.ProcessingState.loading ||
+                       state.processingState == just_audio.ProcessingState.buffering;
 
-    _player.onPlayerComplete.listen((_) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-          _position = Duration.zero;
+          // Reset position when completed
+          if (state.processingState == just_audio.ProcessingState.completed) {
+            _isPlaying = false;
+            _player?.seek(Duration.zero);
+            _player?.pause();
+          }
         });
       }
     });
   }
 
   Future<void> _togglePlay() async {
-    if (_isLoading) return;
+    if (_player == null || _isLoading) return;
 
-    if (_isPlaying) {
-      await _player.pause();
-    } else {
-      setState(() => _isLoading = true);
-      try {
-        if (_position == Duration.zero || _position >= _duration) {
-          await _player.play(UrlSource(widget.url));
-        } else {
-          await _player.resume();
-        }
-      } catch (e) {
-        print('[Audio] Error playing: $e');
-        setState(() => _isLoading = false);
+    try {
+      if (!_isInitialized) {
+        setState(() => _isLoading = true);
+        await _player!.setUrl(widget.url);
+        _isInitialized = true;
       }
+
+      if (_isPlaying) {
+        await _player!.pause();
+      } else {
+        await _player!.play();
+      }
+    } catch (e) {
+      print('[Audio] Error playing: $e');
+      setState(() => _isLoading = false);
     }
   }
 
-  void _changeSpeed() {
+  Future<void> _changeSpeed() async {
     final currentIndex = _speeds.indexOf(_playbackSpeed);
     final nextIndex = (currentIndex + 1) % _speeds.length;
     setState(() => _playbackSpeed = _speeds[nextIndex]);
-    _player.setPlaybackRate(_playbackSpeed);
+    await _player?.setSpeed(_playbackSpeed);
   }
 
   String _formatDuration(Duration d) {
@@ -2323,7 +2323,10 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
 
   @override
   void dispose() {
-    _player.dispose();
+    _durationSub?.cancel();
+    _positionSub?.cancel();
+    _stateSub?.cancel();
+    _player?.dispose();
     super.dispose();
   }
 
@@ -2393,7 +2396,7 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
                         : 0.0,
                     onChanged: (value) {
                       final newPosition = Duration(milliseconds: (value * _duration.inMilliseconds).round());
-                      _player.seek(newPosition);
+                      _player?.seek(newPosition);
                     },
                   ),
                 ),
@@ -2438,96 +2441,6 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// FULL SCREEN IMAGE VIEWER
-// ============================================================================
-
-class _FullScreenImageViewer extends StatefulWidget {
-  const _FullScreenImageViewer({
-    required this.imageUrl,
-    required this.theme,
-  });
-
-  final String imageUrl;
-  final ChatTheme theme;
-
-  @override
-  State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
-}
-
-class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
-  bool _isLoading = true;
-  bool _hasError = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Image.network(
-                widget.imageUrl,
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted && _isLoading) {
-                        setState(() => _isLoading = false);
-                      }
-                    });
-                    return child;
-                  }
-                  return const SizedBox.shrink();
-                },
-                errorBuilder: (context, error, stack) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() {
-                        _isLoading = false;
-                        _hasError = true;
-                      });
-                    }
-                  });
-                  return const Icon(Icons.broken_image, color: Colors.white54, size: 64);
-                },
-              ),
-            ),
-            if (_isLoading && !_hasError)
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(color: Colors.white),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Загрузка...',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }
