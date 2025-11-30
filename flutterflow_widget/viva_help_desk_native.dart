@@ -393,29 +393,56 @@ class ChatwootApiService {
       );
 
       final html = response.data as String;
+      String? authToken;
 
       // Extract authToken from: "authToken":"xxx"
       var match = RegExp('authToken":"([^"]+)"').firstMatch(html);
       if (match != null) {
-        final token = match.group(1);
-        if (token != null && token.isNotEmpty) {
-          _dio.options.headers['X-Auth-Token'] = token;
-          _pubsubToken = token;
-          return token;
+        authToken = match.group(1);
+        if (authToken != null && authToken.isNotEmpty) {
+          _dio.options.headers['X-Auth-Token'] = authToken;
+          print('[Chatwoot] Got auth token from HTML');
         }
       }
 
-      // Try: chatwootPubsubToken = "xxx"
-      match = RegExp('chatwootPubsubToken = "([^"]+)"').firstMatch(html);
+      // Try various pubsub token patterns
+      // Pattern 1: "pubsub_token":"xxx"
+      match = RegExp('pubsub_token":"([^"]+)"').firstMatch(html);
       if (match != null) {
         final token = match.group(1);
         if (token != null && token.isNotEmpty) {
           _pubsubToken = token;
+          print('[Chatwoot] Got pubsub token from HTML (pattern 1): $token');
         }
       }
 
-      return null;
+      // Pattern 2: chatwootPubsubToken = "xxx"
+      if (_pubsubToken == null) {
+        match = RegExp('chatwootPubsubToken\\s*=\\s*"([^"]+)"').firstMatch(html);
+        if (match != null) {
+          final token = match.group(1);
+          if (token != null && token.isNotEmpty) {
+            _pubsubToken = token;
+            print('[Chatwoot] Got pubsub token from HTML (pattern 2): $token');
+          }
+        }
+      }
+
+      // Pattern 3: pubsubToken":"xxx"
+      if (_pubsubToken == null) {
+        match = RegExp('pubsubToken":"([^"]+)"').firstMatch(html);
+        if (match != null) {
+          final token = match.group(1);
+          if (token != null && token.isNotEmpty) {
+            _pubsubToken = token;
+            print('[Chatwoot] Got pubsub token from HTML (pattern 3): $token');
+          }
+        }
+      }
+
+      return authToken;
     } catch (e) {
+      print('[Chatwoot] Error fetching auth token: $e');
       return null;
     }
   }
@@ -568,10 +595,26 @@ class ChatwootApiService {
 
       print('[Chatwoot] Conversations response: ${response.data}');
 
-      // Handle both direct List and {payload: [...]} format
+      // Handle different response formats:
+      // 1. Single conversation object: {id: 123, status: 'open', ...}
+      // 2. List of conversations: [{...}, {...}]
+      // 3. Payload wrapper: {payload: [...]}
       List conversations;
-      if (response.data is Map && response.data['payload'] != null) {
-        conversations = response.data['payload'] as List;
+      if (response.data is Map) {
+        if (response.data['payload'] != null) {
+          // {payload: [...]} format
+          conversations = response.data['payload'] as List;
+        } else if (response.data['id'] != null) {
+          // Single conversation object - wrap in list
+          conversations = [response.data];
+          // Try to get pubsub_token from conversation if available
+          if (response.data['contact']?['pubsub_token'] != null) {
+            _pubsubToken = response.data['contact']['pubsub_token'];
+            print('[Chatwoot] Got pubsub token from conversation: $_pubsubToken');
+          }
+        } else {
+          conversations = [];
+        }
       } else if (response.data is List) {
         conversations = response.data;
       } else {
@@ -1117,10 +1160,10 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     });
   }
 
-  /// Start polling for new messages as fallback
+  /// Start polling for new messages as fallback (3 second interval for near real-time)
   void _startPolling() {
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _pollForNewMessages();
     });
   }
