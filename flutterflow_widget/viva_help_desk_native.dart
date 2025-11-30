@@ -975,6 +975,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   StreamSubscription? _onlineSubscription;
   StreamSubscription? _resolvedSubscription;
   Timer? _typingTimer;
+  Timer? _pollingTimer; // Fallback polling for messages
 
   // flutter_chat_ui user
   late types.User _user;
@@ -1037,19 +1038,26 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
       // Connect WebSocket
       _apiService.connectWebSocket();
 
-      // Listen for new messages
+      // Listen for new messages from WebSocket
       _messageSubscription = _apiService.onMessage.listen((message) {
+        print('[Chatwoot] Stream received message: ${message.id} - ${message.content}');
         if (mounted) {
           setState(() {
             // Avoid duplicates
             if (!_messages.any((m) => m.id == message.id)) {
+              print('[Chatwoot] Adding new message to UI');
               _messages.add(message);
               if (!message.isMine) _unreadCount++;
+            } else {
+              print('[Chatwoot] Message already exists, skipping');
             }
           });
           _scrollToBottom();
         }
       });
+
+      // Start polling as fallback (every 5 seconds)
+      _startPolling();
 
       // Listen for typing
       _typingSubscription = _apiService.onTyping.listen((isTyping) {
@@ -1107,6 +1115,49 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
         );
       }
     });
+  }
+
+  /// Start polling for new messages as fallback
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _pollForNewMessages();
+    });
+  }
+
+  /// Poll for new messages and add any new ones
+  Future<void> _pollForNewMessages() async {
+    if (!mounted || _isLoading) return;
+
+    try {
+      final messages = await _apiService.getMessages();
+      if (!mounted) return;
+
+      // Find new messages that we don't have
+      int newCount = 0;
+      for (final msg in messages) {
+        if (!_messages.any((m) => m.id == msg.id)) {
+          newCount++;
+        }
+      }
+
+      if (newCount > 0) {
+        print('[Chatwoot] Polling found $newCount new messages');
+        setState(() {
+          for (final msg in messages) {
+            if (!_messages.any((m) => m.id == msg.id)) {
+              _messages.add(msg);
+              if (!msg.isMine) _unreadCount++;
+            }
+          }
+          // Sort by date
+          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print('[Chatwoot] Polling error: $e');
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -1171,6 +1222,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     _onlineSubscription?.cancel();
     _resolvedSubscription?.cancel();
     _typingTimer?.cancel();
+    _pollingTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
