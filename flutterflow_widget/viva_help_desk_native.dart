@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 //   flutter_chat_ui: ^2.9.1
 //   flutter_chat_types: ^3.6.2
 //   uuid: ^4.5.1
+//   audioplayers: ^6.1.0
 //   intl: (already included in FlutterFlow)
 
 import 'dart:async';
@@ -22,6 +23,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 
 // ============================================================================
@@ -110,6 +112,16 @@ class ChatMessage {
 
   bool get isCSAT => contentType == 'input_csat';
 
+  /// Check if message has audio attachment
+  ChatAttachment? get audioAttachment {
+    if (attachments.isEmpty) return null;
+    try {
+      return attachments.firstWhere((a) => a.isAudio);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Convert to flutter_chat_types Message for flutter_chat_ui
   types.Message toFlutterChatMessage(String currentUserId) {
     final author = types.User(
@@ -118,35 +130,45 @@ class ChatMessage {
       imageUrl: senderAvatar,
     );
 
-    // Check for image attachments
+    // Check for attachments
     if (attachments.isNotEmpty) {
-      final imageAttachment = attachments.firstWhere(
-        (a) => a.fileType == 'image',
-        orElse: () => ChatAttachment(),
-      );
-      if (imageAttachment.dataUrl != null) {
+      // Check for audio attachments - use CustomMessage
+      final audioAtt = attachments.where((a) => a.isAudio).firstOrNull;
+      if (audioAtt?.dataUrl != null) {
+        return types.CustomMessage(
+          id: id.toString(),
+          author: author,
+          createdAt: createdAt.millisecondsSinceEpoch,
+          metadata: {
+            'type': 'audio',
+            'url': audioAtt!.dataUrl,
+            'duration': audioAtt.fileSize ?? 0,
+          },
+        );
+      }
+
+      // Check for image attachments
+      final imageAttachment = attachments.where((a) => a.isImage).firstOrNull;
+      if (imageAttachment?.dataUrl != null) {
         return types.ImageMessage(
           id: id.toString(),
           author: author,
           createdAt: createdAt.millisecondsSinceEpoch,
           name: 'image',
-          size: 0,
+          size: imageAttachment!.fileSize ?? 0,
           uri: imageAttachment.dataUrl!,
         );
       }
 
       // Check for file attachments
-      final fileAttachment = attachments.firstWhere(
-        (a) => a.fileType == 'file',
-        orElse: () => ChatAttachment(),
-      );
-      if (fileAttachment.dataUrl != null) {
+      final fileAttachment = attachments.where((a) => a.isFile).firstOrNull;
+      if (fileAttachment?.dataUrl != null) {
         return types.FileMessage(
           id: id.toString(),
           author: author,
           createdAt: createdAt.millisecondsSinceEpoch,
-          name: fileAttachment.dataUrl!.split('/').last,
-          size: 0,
+          name: fileAttachment!.dataUrl!.split('/').last,
+          size: fileAttachment.fileSize ?? 0,
           uri: fileAttachment.dataUrl!,
         );
       }
@@ -166,16 +188,24 @@ class ChatAttachment {
   final String? fileType;
   final String? dataUrl;
   final String? thumbUrl;
+  final String? extension;
+  final int? fileSize;
 
-  ChatAttachment({this.fileType, this.dataUrl, this.thumbUrl});
+  ChatAttachment({this.fileType, this.dataUrl, this.thumbUrl, this.extension, this.fileSize});
 
   factory ChatAttachment.fromJson(Map<String, dynamic> json) {
     return ChatAttachment(
       fileType: json['file_type'],
       dataUrl: json['data_url'],
       thumbUrl: json['thumb_url'],
+      extension: json['extension'],
+      fileSize: json['file_size'],
     );
   }
+
+  bool get isAudio => fileType == 'audio';
+  bool get isImage => fileType == 'image';
+  bool get isFile => fileType == 'file';
 }
 
 class ChatContact {
@@ -757,6 +787,9 @@ class ChatwootApiService {
   }
 
   bool _wsSubscribed = false;
+  bool _welcomeReceived = false;
+  int _subscribeRetryCount = 0;
+  Timer? _subscribeRetryTimer;
 
   void connectWebSocket() {
     if (_pubsubToken == null) {
@@ -770,6 +803,8 @@ class ChatwootApiService {
       print('[Chatwoot] Using pubsub token: $_pubsubToken');
       _wsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
       _wsSubscribed = false;
+      _welcomeReceived = false;
+      _subscribeRetryCount = 0;
 
       _wsSubscription = _wsChannel!.stream.listen((data) {
         try {
@@ -783,24 +818,37 @@ class ChatwootApiService {
       }, onDone: () {
         print('[Chatwoot] WebSocket closed');
         _wsSubscribed = false;
-      });
-
-      // Send subscribe command after connection is established
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (_wsChannel != null) {
-          final identifier = jsonEncode({
-            'channel': 'RoomChannel',
-            'pubsub_token': _pubsubToken,
-          });
-          print('[Chatwoot] Subscribing with identifier: $identifier');
-          _wsChannel!.sink.add(jsonEncode({
-            'command': 'subscribe',
-            'identifier': identifier,
-          }));
-        }
+        _welcomeReceived = false;
+        _subscribeRetryTimer?.cancel();
       });
     } catch (e) {
       print('[Chatwoot] WebSocket connection error: $e');
+    }
+  }
+
+  void _sendSubscribeCommand() {
+    if (_wsChannel == null || _pubsubToken == null) return;
+
+    final identifier = jsonEncode({
+      'channel': 'RoomChannel',
+      'pubsub_token': _pubsubToken,
+    });
+    print('[Chatwoot] Subscribing with identifier: $identifier');
+    _wsChannel!.sink.add(jsonEncode({
+      'command': 'subscribe',
+      'identifier': identifier,
+    }));
+
+    // Retry subscription if not confirmed after 2 seconds (max 3 retries)
+    if (_subscribeRetryCount < 3) {
+      _subscribeRetryTimer?.cancel();
+      _subscribeRetryTimer = Timer(const Duration(seconds: 2), () {
+        if (!_wsSubscribed && _welcomeReceived) {
+          _subscribeRetryCount++;
+          print('[Chatwoot] Subscription not confirmed, retry $_subscribeRetryCount/3');
+          _sendSubscribeCommand();
+        }
+      });
     }
   }
 
@@ -817,6 +865,9 @@ class ChatwootApiService {
       switch (type) {
         case 'welcome':
           print('[Chatwoot] WebSocket connected (welcome)');
+          _welcomeReceived = true;
+          // Send subscription after receiving welcome
+          _sendSubscribeCommand();
           return;
         case 'ping':
           // Keep-alive, ignore
@@ -824,10 +875,12 @@ class ChatwootApiService {
         case 'confirm_subscription':
           print('[Chatwoot] Subscription confirmed!');
           _wsSubscribed = true;
+          _subscribeRetryTimer?.cancel();
           return;
         case 'reject_subscription':
           print('[Chatwoot] Subscription rejected!');
           _wsSubscribed = false;
+          _subscribeRetryTimer?.cancel();
           return;
       }
     }
@@ -924,6 +977,7 @@ class ChatwootApiService {
   }
 
   void dispose() {
+    _subscribeRetryTimer?.cancel();
     _wsSubscription?.cancel();
     _wsChannel?.sink.close();
     _messageController.close();
@@ -1556,6 +1610,44 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
             showUserAvatars: true,
             showUserNames: true,
             dateHeaderThreshold: 86400000, // 24 hours in ms
+            // Handle custom audio messages
+            customMessageBuilder: (message, {required int messageWidth}) {
+              if (message is types.CustomMessage) {
+                final metadata = message.metadata;
+                if (metadata != null && metadata['type'] == 'audio') {
+                  final url = metadata['url'] as String?;
+                  if (url != null) {
+                    final isMine = message.author.id == _user.id;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: SizedBox(
+                        width: messageWidth.toDouble() * 0.8,
+                        child: _AudioMessageWidget(
+                          url: url,
+                          theme: _theme,
+                          isMine: isMine,
+                        ),
+                      ),
+                    );
+                  }
+                }
+              }
+              return const SizedBox.shrink();
+            },
+            // Handle image tap to open full-screen viewer
+            onMessageTap: (context, message) {
+              if (message is types.ImageMessage) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => _FullScreenImageViewer(
+                      imageUrl: message.uri,
+                      theme: _theme,
+                    ),
+                  ),
+                );
+              }
+            },
             l10n: widget.locale == 'ru'
                 ? const ChatL10nEn(
                     and: 'и',
@@ -2127,6 +2219,315 @@ class _CSATRatingWidgetState extends State<_CSATRatingWidget> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// AUDIO MESSAGE WIDGET
+// ============================================================================
+
+class _AudioMessageWidget extends StatefulWidget {
+  const _AudioMessageWidget({
+    required this.url,
+    required this.theme,
+    required this.isMine,
+  });
+
+  final String url;
+  final ChatTheme theme;
+  final bool isMine;
+
+  @override
+  State<_AudioMessageWidget> createState() => _AudioMessageWidgetState();
+}
+
+class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
+  late AudioPlayer _player;
+  bool _isPlaying = false;
+  bool _isLoading = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+  double _playbackSpeed = 1.0;
+
+  final List<double> _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  @override
+  void initState() {
+    super.initState();
+    _player = AudioPlayer();
+    _setupPlayer();
+  }
+
+  void _setupPlayer() {
+    _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _duration = d);
+    });
+
+    _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+
+    _player.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = state == PlayerState.playing;
+          _isLoading = false;
+        });
+      }
+    });
+
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
+    });
+  }
+
+  Future<void> _togglePlay() async {
+    if (_isLoading) return;
+
+    if (_isPlaying) {
+      await _player.pause();
+    } else {
+      setState(() => _isLoading = true);
+      try {
+        if (_position == Duration.zero || _position >= _duration) {
+          await _player.play(UrlSource(widget.url));
+        } else {
+          await _player.resume();
+        }
+      } catch (e) {
+        print('[Audio] Error playing: $e');
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _changeSpeed() {
+    final currentIndex = _speeds.indexOf(_playbackSpeed);
+    final nextIndex = (currentIndex + 1) % _speeds.length;
+    setState(() => _playbackSpeed = _speeds[nextIndex]);
+    _player.setPlaybackRate(_playbackSpeed);
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor = widget.isMine ? widget.theme.bubbleMyColor : widget.theme.bubbleTheirColor;
+    final textColor = widget.isMine ? Colors.white : widget.theme.textColor;
+    final secondaryColor = widget.isMine ? Colors.white70 : widget.theme.secondaryTextColor;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Play/Pause button
+          GestureDetector(
+            onTap: _togglePlay,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: widget.isMine ? Colors.white.withOpacity(0.2) : widget.theme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: _isLoading
+                  ? Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: widget.isMine ? Colors.white : widget.theme.primaryColor,
+                        ),
+                      ),
+                    )
+                  : Icon(
+                      _isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: widget.isMine ? Colors.white : widget.theme.primaryColor,
+                      size: 28,
+                    ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Waveform / Progress
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Progress bar
+                SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 4,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    activeTrackColor: widget.isMine ? Colors.white : widget.theme.primaryColor,
+                    inactiveTrackColor: widget.isMine ? Colors.white30 : widget.theme.primaryColor.withOpacity(0.2),
+                    thumbColor: widget.isMine ? Colors.white : widget.theme.primaryColor,
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                  ),
+                  child: Slider(
+                    value: _duration.inMilliseconds > 0
+                        ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+                        : 0.0,
+                    onChanged: (value) {
+                      final newPosition = Duration(milliseconds: (value * _duration.inMilliseconds).round());
+                      _player.seek(newPosition);
+                    },
+                  ),
+                ),
+                // Duration text
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatDuration(_position),
+                        style: TextStyle(fontSize: 11, color: secondaryColor),
+                      ),
+                      Text(
+                        _formatDuration(_duration),
+                        style: TextStyle(fontSize: 11, color: secondaryColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Speed button
+          GestureDetector(
+            onTap: _changeSpeed,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: widget.isMine ? Colors.white.withOpacity(0.2) : widget.theme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_playbackSpeed}x',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: widget.isMine ? Colors.white : widget.theme.primaryColor,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// FULL SCREEN IMAGE VIEWER
+// ============================================================================
+
+class _FullScreenImageViewer extends StatefulWidget {
+  const _FullScreenImageViewer({
+    required this.imageUrl,
+    required this.theme,
+  });
+
+  final String imageUrl;
+  final ChatTheme theme;
+
+  @override
+  State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.network(
+                widget.imageUrl,
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && _isLoading) {
+                        setState(() => _isLoading = false);
+                      }
+                    });
+                    return child;
+                  }
+                  return const SizedBox.shrink();
+                },
+                errorBuilder: (context, error, stack) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _isLoading = false;
+                        _hasError = true;
+                      });
+                    }
+                  });
+                  return const Icon(Icons.broken_image, color: Colors.white54, size: 64);
+                },
+              ),
+            ),
+            if (_isLoading && !_hasError)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.white),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Загрузка...',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
