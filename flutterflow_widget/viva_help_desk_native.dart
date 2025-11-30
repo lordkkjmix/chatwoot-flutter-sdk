@@ -447,11 +447,14 @@ class ChatwootApiService {
           '/api/v1/widget/contact',
           queryParameters: _params,
         );
+        print('[Chatwoot] Contact response: ${response.data}');
         if (response.statusCode == 200 && response.data != null) {
           final contact = ChatContact.fromJson(response.data);
           _contactIdentifier = contact.identifier;
-          if (contact.pubsubToken != null) {
+          // Use contact's pubsub_token for WebSocket (not auth token)
+          if (contact.pubsubToken != null && contact.pubsubToken!.isNotEmpty) {
             _pubsubToken = contact.pubsubToken;
+            print('[Chatwoot] Got pubsub token from contact: $_pubsubToken');
           }
 
           // Update contact with new info if provided
@@ -489,10 +492,12 @@ class ChatwootApiService {
         },
       );
 
+      print('[Chatwoot] set_user response: ${response.data}');
       final contact = ChatContact.fromJson(response.data);
       _contactIdentifier = contact.identifier;
-      if (contact.pubsubToken != null) {
+      if (contact.pubsubToken != null && contact.pubsubToken!.isNotEmpty) {
         _pubsubToken = contact.pubsubToken;
+        print('[Chatwoot] Got pubsub token from set_user: $_pubsubToken');
       }
 
       return contact;
@@ -561,22 +566,37 @@ class ChatwootApiService {
         queryParameters: _params,
       );
 
-      final List conversations = response.data is List ? response.data : [];
+      print('[Chatwoot] Conversations response: ${response.data}');
+
+      // Handle both direct List and {payload: [...]} format
+      List conversations;
+      if (response.data is Map && response.data['payload'] != null) {
+        conversations = response.data['payload'] as List;
+      } else if (response.data is List) {
+        conversations = response.data;
+      } else {
+        conversations = [];
+      }
+
+      print('[Chatwoot] Found ${conversations.length} conversations');
       if (conversations.isNotEmpty) {
         for (var conv in conversations) {
           if (conv['status'] != 'resolved') {
             _conversationId = conv['id'].toString();
+            print('[Chatwoot] Using open conversation: $_conversationId');
             return _conversationId!;
           }
         }
         _conversationId = conversations.last['id'].toString();
+        print('[Chatwoot] Using last conversation: $_conversationId');
         return _conversationId!;
       }
 
       // No conversations - will be created on first message
+      print('[Chatwoot] No existing conversations');
       return '';
     } catch (e) {
-      print('Error getting conversation: $e');
+      print('[Chatwoot] Error getting conversation: $e');
       rethrow;
     }
   }
@@ -590,7 +610,16 @@ class ChatwootApiService {
 
       print('[Chatwoot] Messages response: ${response.data}');
 
-      final List data = response.data is List ? response.data : [];
+      // Response format is {payload: [...], meta: {...}} not a direct List
+      List data;
+      if (response.data is Map && response.data['payload'] != null) {
+        data = response.data['payload'] as List;
+      } else if (response.data is List) {
+        data = response.data;
+      } else {
+        data = [];
+      }
+
       final messages = data
           .map((m) => ChatMessage.fromJson(m))
           .where((m) => !m.isPrivate)
@@ -684,6 +713,8 @@ class ChatwootApiService {
     }
   }
 
+  bool _wsSubscribed = false;
+
   void connectWebSocket() {
     if (_pubsubToken == null) {
       print('[Chatwoot] No pubsub token, skipping WebSocket');
@@ -695,24 +726,38 @@ class ChatwootApiService {
       print('[Chatwoot] Connecting WebSocket to: $wsUrl');
       print('[Chatwoot] Using pubsub token: $_pubsubToken');
       _wsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
-
-      // Subscribe to channel
-      _wsChannel!.sink.add(jsonEncode({
-        'command': 'subscribe',
-        'identifier': jsonEncode({
-          'channel': 'RoomChannel',
-          'pubsub_token': _pubsubToken,
-        }),
-      }));
+      _wsSubscribed = false;
 
       _wsSubscription = _wsChannel!.stream.listen((data) {
         try {
           final decoded = jsonDecode(data);
           _handleWebSocketMessage(decoded);
-        } catch (_) {}
+        } catch (e) {
+          print('[Chatwoot] WebSocket parse error: $e');
+        }
+      }, onError: (error) {
+        print('[Chatwoot] WebSocket error: $error');
+      }, onDone: () {
+        print('[Chatwoot] WebSocket closed');
+        _wsSubscribed = false;
+      });
+
+      // Send subscribe command after connection is established
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (_wsChannel != null) {
+          final identifier = jsonEncode({
+            'channel': 'RoomChannel',
+            'pubsub_token': _pubsubToken,
+          });
+          print('[Chatwoot] Subscribing with identifier: $identifier');
+          _wsChannel!.sink.add(jsonEncode({
+            'command': 'subscribe',
+            'identifier': identifier,
+          }));
+        }
       });
     } catch (e) {
-      print('WebSocket error: $e');
+      print('[Chatwoot] WebSocket connection error: $e');
     }
   }
 
@@ -721,20 +766,62 @@ class ChatwootApiService {
   Stream<bool> get onResolved => _resolvedController.stream;
 
   void _handleWebSocketMessage(Map<String, dynamic> data) {
-    print('[Chatwoot] WebSocket message: $data');
+    print('[Chatwoot] WebSocket raw: $data');
 
+    // Handle ActionCable system messages
+    final type = data['type'];
+    if (type != null) {
+      switch (type) {
+        case 'welcome':
+          print('[Chatwoot] WebSocket connected (welcome)');
+          return;
+        case 'ping':
+          // Keep-alive, ignore
+          return;
+        case 'confirm_subscription':
+          print('[Chatwoot] Subscription confirmed!');
+          _wsSubscribed = true;
+          return;
+        case 'reject_subscription':
+          print('[Chatwoot] Subscription rejected!');
+          _wsSubscribed = false;
+          return;
+      }
+    }
+
+    // Handle actual messages
     final message = data['message'];
-    if (message == null) return;
+    if (message == null) {
+      print('[Chatwoot] No message in data');
+      return;
+    }
 
-    final event = message['event'];
-    final messageData = message['data'];
+    // Message can be a map with event/data structure or direct message data
+    String? event;
+    dynamic messageData;
 
-    print('[Chatwoot] Event: $event');
+    if (message is Map) {
+      event = message['event'] as String?;
+      messageData = message['data'];
+
+      // If no event, check if message itself is the message data
+      if (event == null && message['id'] != null) {
+        // This is a direct message object
+        print('[Chatwoot] Direct message object received');
+        final chatMessage = ChatMessage.fromJson(message as Map<String, dynamic>);
+        if (!chatMessage.isPrivate) {
+          _messageController.add(chatMessage);
+        }
+        return;
+      }
+    }
+
+    print('[Chatwoot] Event: $event, data: $messageData');
 
     switch (event) {
       case 'message.created':
         if (messageData != null) {
-          final chatMessage = ChatMessage.fromJson(messageData);
+          final chatMessage = ChatMessage.fromJson(messageData as Map<String, dynamic>);
           print('[Chatwoot] New message: ${chatMessage.content}, isMine: ${chatMessage.isMine}');
           if (!chatMessage.isPrivate) {
             _messageController.add(chatMessage);
@@ -749,19 +836,21 @@ class ChatwootApiService {
         break;
       case 'conversation.resolved':
       case 'conversation.status_changed':
-        final status = messageData?['status'];
+        final status = messageData is Map ? messageData['status'] : null;
         if (status == 'resolved') {
           print('[Chatwoot] Conversation resolved');
           _resolvedController.add(true);
         }
         break;
       case 'presence.update':
-        final users = messageData?['users'] as Map?;
+        final users = messageData is Map ? messageData['users'] as Map? : null;
         if (users != null && users.isNotEmpty) {
           final isOnline = users.values.any((u) => u == 'online');
           _onlineController.add(isOnline);
         }
         break;
+      default:
+        print('[Chatwoot] Unknown event: $event');
     }
   }
 
