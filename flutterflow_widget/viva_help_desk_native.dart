@@ -654,6 +654,16 @@ class ChatwootApiService {
       print('[Chatwoot] Found ${conversations.length} conversations');
       if (conversations.isNotEmpty) {
         for (var conv in conversations) {
+          // Try to extract pubsub_token from any conversation's contact
+          if (_pubsubToken == null || _pubsubToken!.isEmpty) {
+            final contactToken = conv['contact']?['pubsub_token'] ??
+                                 conv['meta']?['sender']?['pubsub_token'];
+            if (contactToken != null && contactToken.toString().isNotEmpty) {
+              _pubsubToken = contactToken.toString();
+              print('[Chatwoot] Got pubsub token from conversation contact: $_pubsubToken');
+            }
+          }
+
           if (conv['status'] != 'resolved') {
             _conversationId = conv['id'].toString();
             print('[Chatwoot] Using open conversation: $_conversationId');
@@ -687,6 +697,19 @@ class ChatwootApiService {
       List data;
       if (response.data is Map && response.data['payload'] != null) {
         data = response.data['payload'] as List;
+
+        // Try to extract pubsub_token from meta.contact or meta.sender
+        if (_pubsubToken == null || _pubsubToken!.isEmpty) {
+          final meta = response.data['meta'];
+          if (meta != null) {
+            final token = meta['contact']?['pubsub_token'] ??
+                         meta['sender']?['pubsub_token'];
+            if (token != null && token.toString().isNotEmpty) {
+              _pubsubToken = token.toString();
+              print('[Chatwoot] Got pubsub token from messages meta: $_pubsubToken');
+            }
+          }
+        }
       } else if (response.data is List) {
         data = response.data;
       } else {
@@ -836,13 +859,21 @@ class ChatwootApiService {
   }
 
   void _sendSubscribeCommand() {
-    if (_wsChannel == null || _pubsubToken == null) return;
+    if (_wsChannel == null) {
+      print('[Chatwoot] Cannot subscribe: WebSocket not connected');
+      return;
+    }
+    if (_pubsubToken == null || _pubsubToken!.isEmpty) {
+      print('[Chatwoot] WARNING: Cannot subscribe - no pubsub_token available!');
+      print('[Chatwoot] Typing indicator will NOT work without pubsub_token');
+      return;
+    }
 
     final identifier = jsonEncode({
       'channel': 'RoomChannel',
       'pubsub_token': _pubsubToken,
     });
-    print('[Chatwoot] Subscribing with identifier: $identifier');
+    print('[Chatwoot] Subscribing with pubsub_token: ${_pubsubToken!.substring(0, 10)}...');
     _wsChannel!.sink.add(jsonEncode({
       'command': 'subscribe',
       'identifier': identifier,
