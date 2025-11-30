@@ -588,16 +588,19 @@ class ChatwootApiService {
         queryParameters: _params,
       );
 
+      print('[Chatwoot] Messages response: ${response.data}');
+
       final List data = response.data is List ? response.data : [];
       final messages = data
           .map((m) => ChatMessage.fromJson(m))
           .where((m) => !m.isPrivate)
           .toList();
 
+      print('[Chatwoot] Parsed ${messages.length} messages');
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return messages;
     } catch (e) {
-      print('Error getting messages: $e');
+      print('[Chatwoot] Error getting messages: $e');
       return [];
     }
   }
@@ -682,10 +685,15 @@ class ChatwootApiService {
   }
 
   void connectWebSocket() {
-    if (_pubsubToken == null) return;
+    if (_pubsubToken == null) {
+      print('[Chatwoot] No pubsub token, skipping WebSocket');
+      return;
+    }
 
     try {
       final wsUrl = baseUrl.replaceFirst('http', 'ws') + '/cable';
+      print('[Chatwoot] Connecting WebSocket to: $wsUrl');
+      print('[Chatwoot] Using pubsub token: $_pubsubToken');
       _wsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
       // Subscribe to channel
@@ -708,17 +716,26 @@ class ChatwootApiService {
     }
   }
 
+  // Stream for conversation resolved events
+  final StreamController<bool> _resolvedController = StreamController.broadcast();
+  Stream<bool> get onResolved => _resolvedController.stream;
+
   void _handleWebSocketMessage(Map<String, dynamic> data) {
+    print('[Chatwoot] WebSocket message: $data');
+
     final message = data['message'];
     if (message == null) return;
 
     final event = message['event'];
     final messageData = message['data'];
 
+    print('[Chatwoot] Event: $event');
+
     switch (event) {
       case 'message.created':
         if (messageData != null) {
           final chatMessage = ChatMessage.fromJson(messageData);
+          print('[Chatwoot] New message: ${chatMessage.content}, isMine: ${chatMessage.isMine}');
           if (!chatMessage.isPrivate) {
             _messageController.add(chatMessage);
           }
@@ -729,6 +746,14 @@ class ChatwootApiService {
         break;
       case 'conversation.typing_off':
         _typingController.add(false);
+        break;
+      case 'conversation.resolved':
+      case 'conversation.status_changed':
+        final status = messageData?['status'];
+        if (status == 'resolved') {
+          print('[Chatwoot] Conversation resolved');
+          _resolvedController.add(true);
+        }
         break;
       case 'presence.update':
         final users = messageData?['users'] as Map?;
@@ -763,6 +788,7 @@ class ChatwootApiService {
     _messageController.close();
     _typingController.close();
     _onlineController.close();
+    _resolvedController.close();
   }
 }
 
@@ -858,6 +884,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   StreamSubscription? _messageSubscription;
   StreamSubscription? _typingSubscription;
   StreamSubscription? _onlineSubscription;
+  StreamSubscription? _resolvedSubscription;
   Timer? _typingTimer;
 
   // flutter_chat_ui user
@@ -946,6 +973,21 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
       _onlineSubscription = _apiService.onOnline.listen((isOnline) {
         if (mounted) {
           setState(() => _isAgentOnline = isOnline);
+        }
+      });
+
+      // Listen for conversation resolved
+      _resolvedSubscription = _apiService.onResolved.listen((resolved) {
+        if (mounted && resolved) {
+          setState(() {
+            _conversationResolved = true;
+          });
+          // Reload messages to get CSAT
+          _apiService.getMessages().then((msgs) {
+            if (mounted) {
+              setState(() => _messages = msgs);
+            }
+          });
         }
       });
 
@@ -1038,6 +1080,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _onlineSubscription?.cancel();
+    _resolvedSubscription?.cancel();
     _typingTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
