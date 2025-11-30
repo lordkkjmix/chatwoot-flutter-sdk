@@ -353,11 +353,11 @@ class ChatwootApiService {
   StreamSubscription? _wsSubscription;
 
   final StreamController<ChatMessage> _messageController = StreamController.broadcast();
-  final StreamController<bool> _typingController = StreamController.broadcast();
+  final StreamController<String?> _typingController = StreamController.broadcast(); // null = not typing, string = agent name typing
   final StreamController<bool> _onlineController = StreamController.broadcast();
 
   Stream<ChatMessage> get onMessage => _messageController.stream;
-  Stream<bool> get onTyping => _typingController.stream;
+  Stream<String?> get onTyping => _typingController.stream; // null = not typing, string = agent name typing
   Stream<bool> get onOnline => _onlineController.stream;
 
   ChatwootApiService({
@@ -872,10 +872,19 @@ class ChatwootApiService {
         }
         break;
       case 'conversation.typing_on':
-        _typingController.add(true);
+        // Extract agent name from typing event data
+        String? agentName;
+        if (messageData is Map) {
+          // Try different paths where agent name might be
+          agentName = messageData['sender']?['name']
+              ?? messageData['user']?['name']
+              ?? messageData['name'];
+        }
+        print('[Chatwoot] Typing on, agent: $agentName');
+        _typingController.add(agentName ?? ''); // Empty string means typing but no name
         break;
       case 'conversation.typing_off':
-        _typingController.add(false);
+        _typingController.add(null); // null means not typing
         break;
       case 'conversation.resolved':
       case 'conversation.status_changed':
@@ -1006,7 +1015,7 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
-  bool _isTyping = false;
+  String? _typingAgentName; // null = not typing, empty string = typing (unknown agent), non-empty = agent name typing
   bool _isAgentOnline = false;
   String? _error;
   bool _conversationResolved = false;
@@ -1102,10 +1111,10 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
       // Start polling as fallback (every 5 seconds)
       _startPolling();
 
-      // Listen for typing
-      _typingSubscription = _apiService.onTyping.listen((isTyping) {
+      // Listen for typing (receives agent name or null)
+      _typingSubscription = _apiService.onTyping.listen((agentName) {
         if (mounted) {
-          setState(() => _isTyping = isTyping);
+          setState(() => _typingAgentName = agentName);
         }
       });
 
@@ -1360,10 +1369,12 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
                         fontSize: 12,
                       ),
                     ),
-                    if (_isTyping) ...[
+                    if (_typingAgentName != null) ...[
                       const SizedBox(width: 8),
                       Text(
-                        widget.locale == 'ru' ? 'печатает...' : 'typing...',
+                        _typingAgentName!.isNotEmpty
+                            ? (widget.locale == 'ru' ? '$_typingAgentName печатает...' : '$_typingAgentName is typing...')
+                            : (widget.locale == 'ru' ? 'печатает...' : 'typing...'),
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 12,
