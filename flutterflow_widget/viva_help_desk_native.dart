@@ -762,6 +762,7 @@ class ChatwootApiService {
   }
 
   /// Send message with file attachment(s)
+  /// Uses Chatwoot Widget API format: message[attachments][], message[timestamp], etc.
   Future<ChatMessage?> sendMessageWithAttachment({
     String? content,
     required List<AttachmentFile> attachments,
@@ -769,13 +770,24 @@ class ChatwootApiService {
     try {
       final formData = dio.FormData();
 
+      // Add content if provided (Chatwoot format uses message[content])
       if (content != null && content.isNotEmpty) {
-        formData.fields.add(MapEntry('content', content));
+        formData.fields.add(MapEntry('message[content]', content));
       }
 
+      // Add timestamp (required by Chatwoot Widget API)
+      formData.fields.add(MapEntry(
+        'message[timestamp]',
+        DateTime.now().millisecondsSinceEpoch.toString(),
+      ));
+
+      // Add referer URL
+      formData.fields.add(MapEntry('message[referer_url]', 'flutter_widget'));
+
+      // Add attachments with correct field name: message[attachments][]
       for (final attachment in attachments) {
         formData.files.add(MapEntry(
-          'attachments[]',
+          'message[attachments][]',
           dio.MultipartFile.fromBytes(
             attachment.bytes,
             filename: attachment.filename,
@@ -784,6 +796,8 @@ class ChatwootApiService {
         ));
       }
 
+      print('[Chatwoot] Sending attachment: ${attachments.first.filename}');
+
       final response = await _dio.post(
         '/api/v1/widget/messages',
         queryParameters: _params,
@@ -791,13 +805,15 @@ class ChatwootApiService {
         options: dio.Options(contentType: 'multipart/form-data'),
       );
 
+      print('[Chatwoot] Attachment sent successfully: ${response.data}');
+
       if (response.data['conversation_id'] != null) {
         _conversationId = response.data['conversation_id'].toString();
       }
 
       return ChatMessage.fromJson(response.data);
     } catch (e) {
-      print('Error sending attachment: $e');
+      print('[Chatwoot] Error sending attachment: $e');
       return null;
     }
   }
