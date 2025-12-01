@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart' as dio;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -130,9 +132,9 @@ class ChatMessage {
       imageUrl: senderAvatar,
     );
 
-    // Check for attachments
+    // Check for attachments - use CustomMessage to show both attachment AND text
     if (attachments.isNotEmpty) {
-      // Check for audio attachments - use CustomMessage
+      // Check for audio attachments
       final audioAtt = attachments.where((a) => a.isAudio).firstOrNull;
       if (audioAtt?.dataUrl != null) {
         return types.CustomMessage(
@@ -143,6 +145,7 @@ class ChatMessage {
             'type': 'audio',
             'url': audioAtt!.dataUrl,
             'duration': audioAtt.fileSize ?? 0,
+            'text': content, // Include text with attachment
           },
         );
       }
@@ -150,26 +153,35 @@ class ChatMessage {
       // Check for image attachments
       final imageAttachment = attachments.where((a) => a.isImage).firstOrNull;
       if (imageAttachment?.dataUrl != null) {
-        return types.ImageMessage(
+        return types.CustomMessage(
           id: id.toString(),
           author: author,
           createdAt: createdAt.millisecondsSinceEpoch,
-          name: 'image',
-          size: imageAttachment!.fileSize ?? 0,
-          uri: imageAttachment.dataUrl!,
+          metadata: {
+            'type': 'image',
+            'url': imageAttachment!.dataUrl,
+            'thumbUrl': imageAttachment.thumbUrl,
+            'size': imageAttachment.fileSize ?? 0,
+            'text': content, // Include text with attachment
+          },
         );
       }
 
       // Check for file attachments
       final fileAttachment = attachments.where((a) => a.isFile).firstOrNull;
       if (fileAttachment?.dataUrl != null) {
-        return types.FileMessage(
+        return types.CustomMessage(
           id: id.toString(),
           author: author,
           createdAt: createdAt.millisecondsSinceEpoch,
-          name: fileAttachment!.dataUrl!.split('/').last,
-          size: fileAttachment.fileSize ?? 0,
-          uri: fileAttachment.dataUrl!,
+          metadata: {
+            'type': 'file',
+            'url': fileAttachment!.dataUrl,
+            'name': fileAttachment.dataUrl!.split('/').last,
+            'size': fileAttachment.fileSize ?? 0,
+            'extension': fileAttachment.extension,
+            'text': content, // Include text with attachment
+          },
         );
       }
     }
@@ -1650,27 +1662,85 @@ class _VivaHelpDeskNativeState extends State<VivaHelpDeskNative> {
             showUserAvatars: true,
             showUserNames: true,
             dateHeaderThreshold: 86400000, // 24 hours in ms
-            // Handle custom audio messages
+            // Handle custom messages (audio, image, file with text)
             customMessageBuilder: (message, {required int messageWidth}) {
               if (message is types.CustomMessage) {
                 final metadata = message.metadata;
-                if (metadata != null && metadata['type'] == 'audio') {
-                  final url = metadata['url'] as String?;
-                  if (url != null) {
-                    final isMine = message.author.id == _user.id;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: SizedBox(
-                        width: messageWidth.toDouble() * 0.8,
-                        child: _AudioMessageWidget(
-                          url: url,
-                          theme: _theme,
-                          isMine: isMine,
-                        ),
-                      ),
+                if (metadata == null) return const SizedBox.shrink();
+
+                final type = metadata['type'] as String?;
+                final url = metadata['url'] as String?;
+                final text = metadata['text'] as String?;
+                final isMine = message.author.id == _user.id;
+
+                if (url == null) return const SizedBox.shrink();
+
+                Widget attachmentWidget;
+
+                switch (type) {
+                  case 'audio':
+                    attachmentWidget = _AudioMessageWidget(
+                      url: url,
+                      theme: _theme,
+                      isMine: isMine,
                     );
-                  }
+                    break;
+
+                  case 'image':
+                    attachmentWidget = _ImageMessageWidget(
+                      url: url,
+                      thumbUrl: metadata['thumbUrl'] as String?,
+                      theme: _theme,
+                      isMine: isMine,
+                    );
+                    break;
+
+                  case 'file':
+                    attachmentWidget = _FileMessageWidget(
+                      url: url,
+                      name: metadata['name'] as String? ?? 'file',
+                      size: metadata['size'] as int? ?? 0,
+                      extension: metadata['extension'] as String?,
+                      theme: _theme,
+                      isMine: isMine,
+                    );
+                    break;
+
+                  default:
+                    return const SizedBox.shrink();
                 }
+
+                // Show attachment with optional text
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: messageWidth.toDouble() * 0.8,
+                        child: attachmentWidget,
+                      ),
+                      // Show text if present
+                      if (text != null && text.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isMine ? _theme.bubbleMyColor : _theme.bubbleTheirColor,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            text,
+                            style: TextStyle(
+                              color: isMine ? Colors.white : _theme.textColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
               }
               return const SizedBox.shrink();
             },
@@ -2251,6 +2321,291 @@ class _CSATRatingWidgetState extends State<_CSATRatingWidget> {
 }
 
 // ============================================================================
+// IMAGE MESSAGE WIDGET
+// ============================================================================
+
+class _ImageMessageWidget extends StatefulWidget {
+  const _ImageMessageWidget({
+    required this.url,
+    this.thumbUrl,
+    required this.theme,
+    required this.isMine,
+  });
+
+  final String url;
+  final String? thumbUrl;
+  final ChatTheme theme;
+  final bool isMine;
+
+  @override
+  State<_ImageMessageWidget> createState() => _ImageMessageWidgetState();
+}
+
+class _ImageMessageWidgetState extends State<_ImageMessageWidget> {
+  bool _isLoading = true;
+  bool _isFullScreen = false;
+
+  void _downloadImage() {
+    final anchor = html.AnchorElement(href: widget.url)
+      ..setAttribute('download', widget.url.split('/').last)
+      ..target = '_blank';
+    anchor.click();
+  }
+
+  void _openFullScreen() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              InteractiveViewer(
+                child: Image.network(
+                  widget.url,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                        color: widget.theme.primaryColor,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Positioned(
+                top: 40,
+                right: 16,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.download, color: Colors.white, size: 28),
+                      onPressed: _downloadImage,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _openFullScreen,
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.isMine ? widget.theme.bubbleMyColor : widget.theme.bubbleTheirColor,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            children: [
+              Image.network(
+                widget.thumbUrl ?? widget.url,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) {
+                    return child;
+                  }
+                  return Container(
+                    height: 200,
+                    color: widget.theme.surfaceColor,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                            : null,
+                        color: widget.theme.primaryColor,
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    height: 100,
+                    color: widget.theme.surfaceColor,
+                    child: Center(
+                      child: Icon(Icons.broken_image, color: widget.theme.secondaryTextColor),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.download, color: Colors.white, size: 20),
+                    onPressed: _downloadImage,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// FILE MESSAGE WIDGET
+// ============================================================================
+
+class _FileMessageWidget extends StatelessWidget {
+  const _FileMessageWidget({
+    required this.url,
+    required this.name,
+    required this.size,
+    this.extension,
+    required this.theme,
+    required this.isMine,
+  });
+
+  final String url;
+  final String name;
+  final int size;
+  final String? extension;
+  final ChatTheme theme;
+  final bool isMine;
+
+  void _downloadFile() {
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute('download', name)
+      ..target = '_blank';
+    anchor.click();
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  IconData _getFileIcon() {
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return Icons.folder_zip;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor = isMine ? theme.bubbleMyColor : theme.bubbleTheirColor;
+    final textColor = isMine ? Colors.white : theme.textColor;
+    final secondaryColor = isMine ? Colors.white70 : theme.secondaryTextColor;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isMine ? Colors.white.withOpacity(0.2) : theme.primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _getFileIcon(),
+              color: isMine ? Colors.white : theme.primaryColor,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatFileSize(size),
+                  style: TextStyle(
+                    color: secondaryColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _downloadFile,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isMine ? Colors.white.withOpacity(0.2) : theme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(
+                Icons.download,
+                color: isMine ? Colors.white : theme.primaryColor,
+                size: 20,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
 // AUDIO MESSAGE WIDGET
 // ============================================================================
 
@@ -2373,29 +2728,29 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
     final secondaryColor = widget.isMine ? Colors.white70 : widget.theme.secondaryTextColor;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         children: [
           // Play/Pause button
           GestureDetector(
             onTap: _togglePlay,
             child: Container(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: widget.isMine ? Colors.white.withOpacity(0.2) : widget.theme.primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: _isLoading
                   ? Center(
                       child: SizedBox(
-                        width: 20,
-                        height: 20,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: widget.isMine ? Colors.white : widget.theme.primaryColor,
@@ -2405,11 +2760,11 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
                   : Icon(
                       _isPlaying ? Icons.pause : Icons.play_arrow,
                       color: widget.isMine ? Colors.white : widget.theme.primaryColor,
-                      size: 28,
+                      size: 24,
                     ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           // Waveform / Progress
           Expanded(
             child: Column(
@@ -2419,12 +2774,12 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
                 // Progress bar
                 SliderTheme(
                   data: SliderThemeData(
-                    trackHeight: 4,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                     activeTrackColor: widget.isMine ? Colors.white : widget.theme.primaryColor,
                     inactiveTrackColor: widget.isMine ? Colors.white30 : widget.theme.primaryColor.withOpacity(0.2),
                     thumbColor: widget.isMine ? Colors.white : widget.theme.primaryColor,
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
                   ),
                   child: Slider(
                     value: _duration.inMilliseconds > 0
@@ -2435,17 +2790,17 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
                 ),
                 // Duration text
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         _formatDuration(_position),
-                        style: TextStyle(fontSize: 11, color: secondaryColor),
+                        style: TextStyle(fontSize: 10, color: secondaryColor),
                       ),
                       Text(
                         _formatDuration(_duration),
-                        style: TextStyle(fontSize: 11, color: secondaryColor),
+                        style: TextStyle(fontSize: 10, color: secondaryColor),
                       ),
                     ],
                   ),
@@ -2453,20 +2808,20 @@ class _AudioMessageWidgetState extends State<_AudioMessageWidget> {
               ],
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           // Speed button
           GestureDetector(
             onTap: _changeSpeed,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
                 color: widget.isMine ? Colors.white.withOpacity(0.2) : widget.theme.primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${_playbackSpeed}x',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: widget.isMine ? Colors.white : widget.theme.primaryColor,
                 ),
