@@ -73,7 +73,7 @@ class _WebviewState extends State<Webview> {
   @override
   void initState() {
     super.initState();
-    //_requestPermissions();
+    _requestPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       String webviewUrl = widget.widgetUrl;
       final cwCookie = await StoreHelper.getCookie();
@@ -127,10 +127,10 @@ class _WebviewState extends State<Webview> {
         if (Platform.isAndroid && widget.onAttachFile != null) {
           final androidController = _controller!.platform
               as webview_flutter_android.AndroidWebViewController;
-          //androidController.setOnShowFileSelector(_androidFilePicker);
+          androidController.setOnShowFileSelector(_androidFilePicker);
 
-          androidController
-              .setOnShowFileSelector((_) => widget.onAttachFile!.call());
+          /*androidController
+              .setOnShowFileSelector((_) => widget.onAttachFile!.call());*/
         }
 
         if (Platform.isIOS) {
