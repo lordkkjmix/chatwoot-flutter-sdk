@@ -6,7 +6,6 @@ import 'package:chatwoot_flutter_sdk/ui/webview_widget/utils.dart';
 import 'package:chatwoot_flutter_sdk/ui/webview_widget/utils/file_helper.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -172,6 +171,31 @@ class _WebviewState extends State<Webview> {
       String fileName = result.files.single.name;
 
       File originalFile = File(filePath);
+
+      // Check file size and type before processing
+      int sizeInBytes = await originalFile.length();
+      double sizeInMB = sizeInBytes / (1024 * 1024);
+      String fileExt = p.extension(originalFile.path).toLowerCase();
+
+      // Image size limit: 5 MB
+      if (['.jpg', '.jpeg', '.png', '.heic'].contains(fileExt) &&
+          sizeInMB > 5) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Selecciona una imagen con menor resolución (menos de 5 MB)')),
+        );
+        return [];
+      }
+
+      // Video size limit: 10 MB
+      if (['.mp4', '.mov', '.avi', '.mkv'].contains(fileExt) && sizeInMB > 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Selecciona un video con menos de 10 MB')),
+        );
+        return [];
+      }
 
       // 👉 Comprimir antes de copiar al temp
       File? processedFile = await _compressFile(originalFile);
