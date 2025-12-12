@@ -19,7 +19,7 @@ dependencies:
   riverpod: ^2.6.1
   synchronized: ^3.3.0
   webview_flutter: ^4.10.0
-  webview_flutter_android: ^4.10.2
+  webview_flutter_android: '4.10.1'
   webview_flutter_wkwebview: ^3.16.0
   flutter_secure_storage: ^9.2.2
 
