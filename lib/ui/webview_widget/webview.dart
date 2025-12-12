@@ -194,10 +194,10 @@ class _WebviewState extends State<Webview> {
       }
 
       // Video size limit: 10 MB
-      if (['.mp4', '.mov', '.avi', '.mkv'].contains(fileExt) && sizeInMB > 10) {
+      if (['.mp4', '.mov', '.avi', '.mkv'].contains(fileExt) && sizeInMB > 5) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Selecciona un video con menos de 10 MB')),
+              content: Text('Selecciona un video con menos de 5 MB')),
         );
         return [];
       }
@@ -243,6 +243,20 @@ class _WebviewState extends State<Webview> {
 
         if (info == null || info.file == null) {
           throw Exception("No se pudo comprimir el video");
+        }
+
+        ///verificar de nuevo el tamanio del video
+        ///
+        final trimmedSizeBytes = info.file!.lengthSync();
+        final trimmedSizeMB = (trimmedSizeBytes / (1024 * 1024)).toStringAsFixed(2);
+        debugPrint('Trimmed video size: $trimmedSizeMB MB');
+
+        if (trimmedSizeBytes > maxBytes) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('No se pudo subir el video')),
+          );
+          return null;
         }
 
         return info.file!;
