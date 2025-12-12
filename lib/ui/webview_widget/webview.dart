@@ -15,6 +15,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart'
     as webview_flutter_android;
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
+const int maxBytes = 2 * 1024 * 1024; // 2MB
 
 ///Chatwoot webview widget
 /// {@category FlutterClientSdk}
@@ -165,7 +166,11 @@ class _WebviewState extends State<Webview> {
       await Permission.storage.request();
     }
 
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
+    FilePickerResult? result = await FilePicker.platform.pickFiles( type: FileType.custom,
+        allowedExtensions: [
+          'jpg', 'jpeg', 'png', 'heic',  // imágenes
+          'mp4', 'mov', 'avi', 'mkv'     // videos
+        ], withData: true);
     if (result != null) {
       String filePath = result.files.single.path!;
       String fileName = result.files.single.name;
@@ -200,8 +205,9 @@ class _WebviewState extends State<Webview> {
       // 👉 Comprimir antes de copiar al temp
       File? processedFile = await _compressFile(originalFile);
 
+      if (processedFile == null) return [];
       // Si falla, usamos el original
-      processedFile ??= originalFile;
+      //processedFile ??= originalFile;
 
       // Copiar al directory temporal como exige el WebView
       final tempDir = await getTemporaryDirectory();
