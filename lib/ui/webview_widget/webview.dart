@@ -47,6 +47,9 @@ class Webview extends StatefulWidget {
   /// Whether to show the close button in the chat widget
   final bool showCloseButton;
 
+  /// Initial message to send when widget loads
+  final String? initialMessage;
+
   Webview(
       {Key? key,
       required String websiteToken,
@@ -59,7 +62,8 @@ class Webview extends StatefulWidget {
       this.onLoadStarted,
       this.onLoadProgress,
       this.onLoadCompleted,
-      this.showCloseButton = false})
+      this.showCloseButton = false,
+      this.initialMessage})
       : super(key: key) {
     this.baseUrl = baseUrl;
     widgetUrl =
@@ -78,7 +82,6 @@ class _WebviewState extends State<Webview> {
   @override
   void initState() {
     super.initState();
-   // _requestPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       String webviewUrl = widget.widgetUrl;
       final cwCookie = await StoreHelper.getCookie();
@@ -120,6 +123,10 @@ class _WebviewState extends State<Webview> {
                 final authToken = parsedMessage["config"]["authToken"];
                 StoreHelper.storeCookie(authToken);
                 _controller?.runJavaScript(widget.injectedJavaScript);
+                if (widget.initialMessage != null) {
+                  _controller?.runJavaScript(
+                      generateSendMessageScript(widget.initialMessage!));
+                }
               }
               if (type == 'close-widget' && widget.showCloseButton) {
                 widget.closeWidget?.call();
@@ -150,15 +157,6 @@ class _WebviewState extends State<Webview> {
       });
     });
   }
-
-/*  // helper to request permissions
-  Future<void> _requestPermissions() async {
-    await Permission.microphone.request();
-    await Permission.camera.request();
-    await Permission.storage.request();
-    await Permission.photos.request();
-    await Permission.phone.request();
-  }*/
 
   Future<List<String>> _androidFilePicker(webview_flutter_android.FileSelectorParams params) async {
     // Ensure storage permission is granted

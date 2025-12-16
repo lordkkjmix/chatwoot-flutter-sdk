@@ -52,6 +52,52 @@ String generateScripts(
   return script;
 }
 
+String generateSendMessageScript(String message) {
+  return '''
+    (function() {
+      console.log("Chatwoot: Attempting to send initial message...");
+      
+      var maxRetries = 20;
+      var retries = 0;
+      
+      var interval = setInterval(function() {
+        var textArea = document.querySelector('textarea[placeholder*="Type your message"]');
+        if (!textArea) {
+             textArea = document.querySelector('textarea');
+        }
+
+        if (textArea) {
+          console.log("Chatwoot: Textarea found!");
+          clearInterval(interval);
+          
+          // React requires detailed input simulation
+          var nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+          nativeTextAreaValueSetter.call(textArea, "$message");
+          
+          var ev2 = new Event('input', { bubbles: true});
+          textArea.dispatchEvent(ev2);
+          
+          setTimeout(function() {
+             var enterEvent = new KeyboardEvent('keydown', {
+               bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter'
+             });
+             textArea.dispatchEvent(enterEvent);
+             console.log("Chatwoot: Initial message sent");
+          }, 100);
+          
+        } else {
+          retries++;
+          if (retries >= maxRetries) {
+             console.log("Chatwoot: Textarea not found after retries. Aborting.");
+             clearInterval(interval);
+          }
+        }
+      }, 500);
+    })();
+  ''';
+}
+
+
 const _androidOptions = AndroidOptions(
   encryptedSharedPreferences: true,
 );
