@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+  sdk: "^3.5.3"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -40,12 +40,19 @@ dependencies:
     path: ../
 
   # File picker for attachment functionality
-  file_picker: ^8.1.2
+  file_picker: ^10.3.3
 
   # Additional dependencies for custom chat page
   flutter_chat_ui: ^1.6.15
   flutter_chat_types: ^3.6.2
   uuid: ^4.5.1
+  path_provider: ^2.1.5
+  permission_handler: ^11.3.1
+  flutter_sound: ^9.28.0
+  audioplayers: ^6.5.1
+  video_player: ^2.10.0
+  cached_video_player_plus: ^4.0.4
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:

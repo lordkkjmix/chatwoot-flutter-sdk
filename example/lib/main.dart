@@ -39,7 +39,8 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
 
   // Demo configuration - Replace with your actual Chatwoot instance details
   final String _baseUrl = 'https://app.chatwoot.app';
-  final String _inboxIdentifier = 'FJuAD272ZhPMDPmc4ciorqx7d4F';
+  final String _inboxIdentifier = 'QW7mgWQG7a5Tz2sfJHTEVrLP3';
+  final String _websiteToken = 'FJuAD272ZhPMDPmc4ciorqx7d4F';
 
   @override
   void initState() {
@@ -173,7 +174,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
         builder: (context) => Scaffold(
           appBar: AppBar(title: const Text('Chatwoot Chat')),
           body: ChatwootWidget(
-            websiteToken: _inboxIdentifier,
+            websiteToken: _websiteToken,
             baseUrl: _baseUrl,
             user: ChatwootUser(
               identifier: 'user@example.com',
@@ -207,7 +208,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
   }
 
   void _openCustomChatPage() {
-    Navigator.push(
+   /* Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CustomChatPage(
@@ -221,7 +222,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
           title: 'Custom Flutter Chat',
         ),
       ),
-    );
+    );*/
   }
 
   void _openChatDialog() {
@@ -245,7 +246,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
               ),
               Expanded(
                 child: ChatwootWidget(
-                  websiteToken: _inboxIdentifier,
+                  websiteToken: _websiteToken,
                   baseUrl: _baseUrl,
                   user: ChatwootUser(
                     identifier: 'user@example.com',

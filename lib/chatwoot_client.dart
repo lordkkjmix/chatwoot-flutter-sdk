@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:chatwoot_flutter_sdk/chatwoot_sdk.dart';
 import 'package:chatwoot_flutter_sdk/data/chatwoot_repository.dart';
 import 'package:chatwoot_flutter_sdk/data/local/entity/chatwoot_contact.dart';
@@ -58,6 +60,30 @@ class ChatwootClient {
       {required String content, required String echoId}) async {
     final request = ChatwootNewMessageRequest(content: content, echoId: echoId);
     await _repository.sendMessage(request);
+  }
+
+  /// Sends an audio message. The echoId is your temporary message id. When the message is sent successfully,
+  /// a [ChatwootMessage] will be returned with the [echoId] on [ChatwootCallbacks.onMessageSent]. If the
+  /// message fails to send, [ChatwootCallbacks.onError] will be triggered with the [echoId] as data.
+  ///
+  /// The [content] is an optional caption for the audio.
+  /// The [fileAudio] is the audio file to be sent.
+  Future<void> sendMessageAudio(
+      {required String content, required String echoId, required File fileAudio}) async {
+    final request = ChatwootNewMessageRequest(content: content, echoId: echoId);
+    await _repository.sendMessageAudio(request, fileAudio);
+  }
+
+  /// Sends a media file (image, video, etc.). The echoId is your temporary message id. When the message is sent successfully,
+  /// a [ChatwootMessage] will be returned with the [echoId] on [ChatwootCallbacks.onMessageSent]. If the
+  /// message fails to send, [ChatwootCallbacks.onError] will be triggered with the [echoId] as data.
+  ///
+  /// The [content] is an optional caption for the media file.
+  /// The [media] is the file to be sent.
+  Future<void> sendMessageMedia(
+      {required String content, required String echoId, required File media}) async {
+    final request = ChatwootNewMessageRequest(content: content, echoId: echoId);
+    await _repository.sendMessageMedia(request, media);
   }
 
   ///Send chatwoot action performed by user.
