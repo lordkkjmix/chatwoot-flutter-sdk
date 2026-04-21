@@ -1,3 +1,4 @@
+/*
 import 'dart:io';
 
 import 'package:chatwoot_example/permision/utils.dart';
@@ -9,7 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:flutter_sound/public/flutter_sound_recorder.dart';
+//import 'package:flutter_sound/public/flutter_sound_recorder.dart';
 import 'package:mime/mime.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -44,7 +45,7 @@ class _CustomChatPageState extends State<CustomChatPage> {
   String _connectionStatus = 'Connecting...';
   final TextEditingController _controller = TextEditingController();
 
-  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  //final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
   bool _isRecording = false;
 
   // Create a user for the chat interface
@@ -779,4 +780,4 @@ class _CustomChatPageState extends State<CustomChatPage> {
       ),
     );
   }
-}
+}*/

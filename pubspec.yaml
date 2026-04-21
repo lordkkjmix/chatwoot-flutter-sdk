@@ -25,7 +25,7 @@ dependencies:
   permission_handler: ^11.3.1
   file_picker: ^10.3.3
   path_provider: ^2.1.5
-  flutter_sound: ^9.28.0
+#  flutter_sound: ^9.28.0
   flutter_image_compress: ^2.4.0
   video_compress: ^3.1.4
   image: ^4.5.4

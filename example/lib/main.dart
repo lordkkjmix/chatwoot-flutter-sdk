@@ -208,7 +208,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
   }
 
   void _openCustomChatPage() {
-    Navigator.push(
+   /* Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CustomChatPage(
@@ -222,7 +222,7 @@ class _ChatwootHomePageState extends State<ChatwootHomePage> {
           title: 'Custom Flutter Chat',
         ),
       ),
-    );
+    );*/
   }
 
   void _openChatDialog() {
